@@ -1,0 +1,88 @@
+{
+  "name": "forge-browser",
+  "version": "0.1.0-alpha",
+  "description": "Forge - A lightweight custom browser by Forgeworks Interactive Limited",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "keywords": [
+    "browser",
+    "chromium",
+    "electron",
+    "forge",
+    "lightweight"
+  ],
+  "author": {
+    "name": "Forgeworks Interactive Limited",
+    "email": "michael@forgeworksinteractive.com"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.2",
+    "electron": "^40.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.forgeworks.forge",
+    "productName": "Forge",
+    "copyright": "Copyright © 2026 Forgeworks Interactive Limited",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/forge-logo.ico",
+      "executableName": "Forge",
+      "legalTrademarks": "Forgeworks Interactive Limited",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/forge-logo.ico",
+      "uninstallerIcon": "assets/forge-logo.ico",
+      "installerHeaderIcon": "assets/forge-logo.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Forge Browser"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icon.png",
+      "category": "Network"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2"
+  }
+}

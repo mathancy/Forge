@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e94560"/>
+      <stop offset="100%" style="stop-color:#ff6b6b"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background Circle -->
+  <circle cx="128" cy="128" r="120" fill="url(#bgGradient)" stroke="url(#accentGradient)" stroke-width="4"/>
+  
+  <!-- Forge Symbol (Anvil-inspired) -->
+  <g transform="translate(128, 128)">
+    <!-- Top flame/spark -->
+    <path d="M0 -60 L-20 -20 L0 -35 L20 -20 Z" fill="url(#accentGradient)"/>
+    
+    <!-- Main anvil body -->
+    <path d="M-50 0 L-40 -20 L40 -20 L50 0 L50 20 L30 20 L30 50 L-30 50 L-30 20 L-50 20 Z" 
+          fill="#eaeaea" opacity="0.9"/>
+    
+    <!-- Anvil highlight -->
+    <path d="M-40 -20 L-30 -10 L30 -10 L40 -20" 
+          fill="none" stroke="url(#accentGradient)" stroke-width="3"/>
+  </g>
+</svg>

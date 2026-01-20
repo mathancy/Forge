@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' forge-asset:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src * data: blob: 'self' forge-asset:; frame-src *; child-src *;">
+  <title>Forge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Tab Bar with Window Controls -->
+    <div id="tabbar">
+      <div id="tabs-container">
+        <!-- Tabs will be dynamically added here -->
+      </div>
+      <button id="btn-new-tab" class="tab-btn" title="New Tab">
+        <img src="forge-asset://ui-icons/plus.svg" alt="+" width="14" height="14">
+      </button>
+      <div class="tabbar-spacer"></div>
+      <div class="window-controls">
+        <button id="btn-minimize" class="window-btn" title="Minimize">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <rect width="10" height="1" x="1" y="6" fill="currentColor"/>
+          </svg>
+        </button>
+        <button id="btn-maximize" class="window-btn" title="Maximize">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <rect width="9" height="9" x="1.5" y="1.5" fill="none" stroke="currentColor" stroke-width="1"/>
+          </svg>
+        </button>
+        <button id="btn-close" class="window-btn close-btn" title="Close">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation Bar -->
+    <div id="navbar">
+      <div class="nav-buttons">
+        <button id="btn-back" class="nav-btn" title="Back" disabled>
+          <img class="nav-icon" src="forge-asset://ui-icons/back.svg" alt="Back">
+        </button>
+        <button id="btn-forward" class="nav-btn" title="Forward" disabled>
+          <img class="nav-icon" src="forge-asset://ui-icons/forward.svg" alt="Forward">
+        </button>
+        <button id="btn-reload" class="nav-btn" title="Refresh">
+          <img class="nav-home-icon" src="forge-asset://ui-icons/refresh.svg" alt="Refresh">
+        </button>
+        <button id="btn-home" class="nav-btn" title="Home">
+          <img class="nav-home-icon" src="forge-asset://ui-icons/home.svg" alt="Home">
+        </button>
+      </div>
+      <div class="url-container">
+        <div class="security-indicator" id="security-indicator">
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <path d="M7 1L2 3v4c0 3.5 2.5 6 5 7 2.5-1 5-3.5 5-7V3L7 1z" stroke="currentColor" stroke-width="1" fill="none"/>
+          </svg>
+        </div>
+        <input type="text" id="url-input" placeholder="Search or enter URL" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="nav-actions">
+        <div id="ai-buttons" class="ai-buttons">
+          <!-- AI agent buttons will be dynamically added here -->
+        </div>
+        <button id="btn-menu" class="nav-btn" title="Menu">
+          <svg class="nav-menu-icon" width="16" height="16" viewBox="0 0 16 16">
+            <circle cx="8" cy="3" r="1.5" fill="currentColor"/>
+            <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+            <circle cx="8" cy="13" r="1.5" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Browser Content Area -->
+    <div id="browser-content">
+      <!-- Webviews will be dynamically added here -->
+      <div id="welcome-page" class="welcome">
+        <div class="welcome-content">
+          <div class="forge-logo">
+            <img src="forge-asset://forge-logo.svg" alt="Forge Logo">
+          </div>
+          <div class="welcome-title">
+            <div class="welcome-title-small">welcome to</div>
+            <div class="welcome-title-large">forge</div>
+          </div>
+          <div class="search-box">
+            <input type="text" id="home-search" placeholder="Search the web...">
+            <img class="search-box-logo" src="forge-asset://site-logos/Google.svg" alt="Google">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="statusbar">
+      <span id="status-text">Ready</span>
+      <span id="status-info"></span>
+    </div>
+
+    <!-- Tab Context Menu -->
+    <div id="tab-context-menu" class="context-menu hidden">
+      <div class="context-menu-item" data-action="new-tab-right">New Tab to the Right</div>
+      <div class="context-menu-item" data-action="move-to-new-window">Move Tab to new Window</div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="reload">Reload</div>
+      <div class="context-menu-item" data-action="duplicate">Duplicate</div>
+      <div class="context-menu-item" data-action="mute">Mute this Tab</div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="close">Close</div>
+      <div class="context-menu-item" data-action="close-others">Close other Tabs</div>
+      <div class="context-menu-item" data-action="close-right">Close Tabs to the right</div>
+    </div>
+
+    <!-- Main Menu Dropdown -->
+    <div id="main-menu" class="context-menu hidden">
+      <div class="context-menu-item" data-action="google-account" id="menu-google-account">
+        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="5.5" r="3" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <span id="google-account-text">Sign in with Google</span>
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="history">
+        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M8 4.5V8L10.5 10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        History
+      </div>
+      <div class="context-menu-item" data-action="import-chrome">
+        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.2"/>
+          <circle cx="8" cy="8" r="2.5" fill="currentColor"/>
+          <path d="M8 1v4.5M15 8h-4.5M8 15v-4.5M1 8h4.5" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+        Import from Chrome
+      </div>
+      <div class="context-menu-item" data-action="ai-assistant">
+        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          <circle cx="8" cy="8" r="4" stroke="currentColor" stroke-width="1.2"/>
+          <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+        </svg>
+        AI Assistant
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="devtools">
+        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Developer Tools
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="about">
+        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M8 7v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="8" cy="4.5" r="1" fill="currentColor"/>
+        </svg>
+        About Forge
+      </div>
+    </div>
+
+    <!-- About Forge Panel -->
+    <div id="about-panel" class="panel hidden">
+      <div class="panel-header">
+        <h2>About Forge</h2>
+        <button id="btn-close-about" class="panel-close-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+      </div>
+      <div class="panel-content about-content">
+        <div class="about-logo">
+          <img src="forge-asset://forge-logo.svg" alt="Forge Logo" width="80" height="80">
+        </div>
+        <div class="about-title">Forge Browser</div>
+        <div class="about-version" id="about-version">Version 0.1.0-alpha</div>
+        <div class="about-description">
+          A lightweight, privacy-focused browser built by Forgeworks Interactive Limited. 
+          Designed for speed, simplicity, and seamless AI integration.
+        </div>
+        <div class="about-copyright">
+          © 2026 Forgeworks Interactive Limited
+        </div>
+        <button id="btn-check-updates" class="about-update-btn">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v3M8 11v3M2 8h3M11 8h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M4.5 4.5l2 2M9.5 9.5l2 2M4.5 11.5l2-2M9.5 6.5l2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Check for Updates
+        </button>
+        <div id="update-status" class="about-update-status"></div>
+      </div>
+    </div>
+
+    <!-- Google Account Panel -->
+    <div id="google-account-panel" class="panel hidden">
+      <div class="panel-header">
+        <h2>Google Account</h2>
+        <button id="btn-close-google-panel" class="panel-close-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+      </div>
+      <div id="google-account-content" class="panel-content">
+        <!-- Content will be dynamically populated -->
+      </div>
+    </div>
+
+    <!-- History Panel -->
+    <div id="history-panel" class="panel hidden">
+      <div class="panel-header">
+        <h2>History</h2>
+        <button id="btn-close-history" class="panel-close-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+      </div>
+      <div class="panel-toolbar">
+        <input type="text" id="history-search" placeholder="Search history...">
+        <button id="btn-clear-history" class="panel-btn" title="Clear all history">Clear All</button>
+      </div>
+      <div id="history-list" class="panel-list">
+        <!-- History items will be dynamically added here -->
+      </div>
+    </div>
+
+    <!-- Chrome Import Panel -->
+    <div id="chrome-import-panel" class="panel hidden">
+      <div class="panel-header">
+        <h2>Import from Chrome</h2>
+        <button id="btn-close-chrome-import" class="panel-close-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+      </div>
+      <div id="chrome-import-content" class="panel-content">
+        <!-- Content will be dynamically populated -->
+      </div>
+    </div>
+
+    <!-- AI Assistant Settings Panel -->
+    <div id="ai-settings-panel" class="panel hidden">
+      <div class="panel-header">
+        <h2>AI Assistant</h2>
+        <button id="btn-close-ai-settings" class="panel-close-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+      </div>
+      <div id="ai-settings-content" class="panel-content">
+        <!-- AI provider settings will be dynamically populated -->
+      </div>
+    </div>
+
+    <!-- AI Webview Panel (right side) -->
+    <div id="ai-webview-panel" class="ai-webview-panel hidden">
+      <div class="ai-webview-header">
+        <div class="ai-webview-title">
+          <span id="ai-webview-icon" class="ai-webview-icon"></span>
+          <span id="ai-webview-name">AI Assistant</span>
+        </div>
+        <button id="btn-ai-webview-close" class="ai-webview-close-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+      </div>
+      <div id="ai-webview-container" class="ai-webview-container">
+        <!-- Webview will be dynamically inserted here -->
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
