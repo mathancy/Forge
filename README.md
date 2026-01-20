@@ -82,7 +82,7 @@ ForgeBrowser/
 
 - [ ] Native ad-blocker
 - [ ] Bookmarks management
-- [ ] History panel
+- [X] History panel
 - [ ] Downloads manager
 - [ ] Settings page
 - [ ] Extensions support

@@ -32,6 +32,7 @@ class ForgeBrowser {
     this.cacheElements();
     this.bindEvents();
     this.setupWindowControls();
+    this.initUpdateListener();
     
     // Display app info
     const appInfo = await window.forgeAPI.getAppInfo();
@@ -1783,15 +1784,76 @@ class ForgeBrowser {
     this.aboutPanel.classList.add('hidden');
   }
   
+  initUpdateListener() {
+    // Listen for update status events from main process
+    window.forgeAPI.updates.onUpdateStatus((data) => {
+      this.handleUpdateStatus(data);
+    });
+  }
+  
+  handleUpdateStatus(data) {
+    const { status, version, percent, error } = data;
+    
+    switch (status) {
+      case 'checking-for-update':
+        this.updateStatus.textContent = 'Checking for updates...';
+        this.updateStatus.className = 'about-update-status checking';
+        break;
+        
+      case 'update-available':
+        this.updateStatus.innerHTML = `
+          <span>Version ${version} is available!</span>
+          <button id="download-update-btn" class="about-update-download-btn">Download Update</button>
+        `;
+        this.updateStatus.className = 'about-update-status available';
+        document.getElementById('download-update-btn')?.addEventListener('click', async () => {
+          await window.forgeAPI.updates.downloadUpdate();
+        });
+        break;
+        
+      case 'update-not-available':
+        this.updateStatus.textContent = 'You are running the latest version.';
+        this.updateStatus.className = 'about-update-status success';
+        break;
+        
+      case 'download-progress':
+        this.updateStatus.textContent = `Downloading update: ${percent.toFixed(1)}%`;
+        this.updateStatus.className = 'about-update-status downloading';
+        break;
+        
+      case 'update-downloaded':
+        this.updateStatus.innerHTML = `
+          <span>Update ${version} ready to install!</span>
+          <button id="install-update-btn" class="about-update-install-btn">Restart & Install</button>
+        `;
+        this.updateStatus.className = 'about-update-status ready';
+        document.getElementById('install-update-btn')?.addEventListener('click', () => {
+          window.forgeAPI.updates.installUpdate();
+        });
+        break;
+        
+      case 'update-error':
+        this.updateStatus.textContent = `Update error: ${error || 'Unknown error'}`;
+        this.updateStatus.className = 'about-update-status error';
+        break;
+    }
+  }
+  
   async checkForUpdates() {
     this.updateStatus.textContent = 'Checking for updates...';
     this.updateStatus.className = 'about-update-status checking';
     
-    // Simulate checking (will be replaced with actual GitHub API call later)
-    setTimeout(() => {
-      this.updateStatus.textContent = 'You are running the latest version.';
-      this.updateStatus.className = 'about-update-status success';
-    }, 1500);
+    try {
+      const result = await window.forgeAPI.updates.checkForUpdates();
+      if (!result.success) {
+        this.updateStatus.textContent = `Update check failed: ${result.error}`;
+        this.updateStatus.className = 'about-update-status error';
+      }
+      // Status will be updated via the update-status event
+    } catch (e) {
+      this.updateStatus.textContent = 'Could not check for updates. Please try again later.';
+      this.updateStatus.className = 'about-update-status error';
+    }
   }
 
   // ==================== AI Assistant Methods ====================

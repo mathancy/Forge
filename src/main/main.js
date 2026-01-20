@@ -4,6 +4,7 @@ const fs = require('fs');
 const GoogleAuth = require('./google-auth');
 const ChromeImporter = require('./chrome-importer');
 const AIService = require('./ai-service');
+const autoUpdaterService = require('./auto-updater');
 
 // Initialize Chrome Importer
 const chromeImporter = new ChromeImporter();
@@ -118,6 +119,17 @@ app.whenReady().then(() => {
   });
   
   createWindow();
+  
+  // Initialize auto-updater after window is created
+  if (app.isPackaged) {
+    autoUpdaterService.initialize(mainWindow);
+    // Check for updates 3 seconds after app starts
+    setTimeout(() => {
+      autoUpdaterService.checkForUpdates().catch(err => {
+        console.log('Auto-update check failed:', err.message);
+      });
+    }, 3000);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

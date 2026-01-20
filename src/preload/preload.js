@@ -51,6 +51,17 @@ contextBridge.exposeInMainWorld('forgeAPI', {
     toggleProvider: (providerId, enabled) => ipcRenderer.invoke('ai-toggle-provider', providerId, enabled)
   },
   
+  // Auto-updater
+  updates: {
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    downloadUpdate: () => ipcRenderer.invoke('download-update'),
+    installUpdate: () => ipcRenderer.invoke('install-update'),
+    getStatus: () => ipcRenderer.invoke('get-update-status'),
+    onUpdateStatus: (callback) => {
+      ipcRenderer.on('update-status', (event, data) => callback(data));
+    }
+  },
+  
   // Future: Ad-blocker controls
   // toggleAdBlock: (enabled) => ipcRenderer.invoke('toggle-adblock', enabled),
 });
