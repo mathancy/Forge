@@ -1833,9 +1833,35 @@ class ForgeBrowser {
         break;
         
       case 'update-error':
-        this.updateStatus.textContent = `Update error: ${error || 'Unknown error'}`;
-        this.updateStatus.className = 'about-update-status error';
+        this.showUpdateError(error || 'Unknown error');
         break;
+    }
+  }
+  
+  showUpdateError(errorMessage) {
+    this.lastUpdateError = errorMessage;
+    this.updateStatus.innerHTML = `
+      <span>Update check failed</span>
+      <button id="copy-error-btn" class="about-update-copy-btn">Copy Error</button>
+    `;
+    this.updateStatus.className = 'about-update-status error';
+    document.getElementById('copy-error-btn')?.addEventListener('click', () => {
+      this.copyUpdateErrorToClipboard();
+    });
+  }
+  
+  async copyUpdateErrorToClipboard() {
+    try {
+      await navigator.clipboard.writeText(this.lastUpdateError);
+      const btn = document.getElementById('copy-error-btn');
+      if (btn) {
+        btn.textContent = 'Copied!';
+        setTimeout(() => {
+          btn.textContent = 'Copy Error';
+        }, 2000);
+      }
+    } catch (e) {
+      console.error('Failed to copy error:', e);
     }
   }
   
@@ -1846,13 +1872,11 @@ class ForgeBrowser {
     try {
       const result = await window.forgeAPI.updates.checkForUpdates();
       if (!result.success) {
-        this.updateStatus.textContent = `Update check failed: ${result.error}`;
-        this.updateStatus.className = 'about-update-status error';
+        this.showUpdateError(result.error || 'Unknown error');
       }
       // Status will be updated via the update-status event
     } catch (e) {
-      this.updateStatus.textContent = 'Could not check for updates. Please try again later.';
-      this.updateStatus.className = 'about-update-status error';
+      this.showUpdateError(e.message || 'Could not check for updates');
     }
   }
 

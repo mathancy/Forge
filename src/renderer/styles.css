@@ -1541,6 +1541,15 @@ webview.active {
   background: #43a047;
 }
 
+.about-update-copy-btn {
+  background: #666;
+  color: white;
+}
+
+.about-update-copy-btn:hover {
+  background: #777;
+}
+
 /* AI Webview Panel (right side of window) */
 .ai-webview-panel {
   position: fixed;
