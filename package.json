@@ -1,6 +1,6 @@
 {
   "name": "forge-browser",
-  "version": "0.1.21-alpha",
+  "version": "0.1.3-alpha",
   "description": "Forge - A lightweight custom browser by Forgeworks Interactive Limited",
   "main": "src/main/main.js",
   "scripts": {

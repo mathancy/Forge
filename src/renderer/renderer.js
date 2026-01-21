@@ -169,14 +169,91 @@ class ForgeBrowser {
     this.btnHome.addEventListener('click', () => this.goHome());
     
     // URL input
+    // Autocomplete suggestions
+    this.urlSuggestions = document.getElementById('url-suggestions');
+    this.suggestions = [];
+    this.selectedSuggestionIndex = -1;
+    this.suggestionDebounceTimer = null;
+    this.lastUserInput = ''; // Track what the user actually typed
+    
+    this.urlInput.addEventListener('input', (e) => {
+      // Check if user is deleting (backspace/delete removes selection or chars)
+      const currentValue = this.urlInput.value;
+      const selectionStart = this.urlInput.selectionStart;
+      
+      // If user typed and there was a selection (autocomplete), they're replacing it
+      // Get only the portion before the selection as user's actual input
+      if (selectionStart !== currentValue.length) {
+        // Selection exists, user's input is up to cursor
+        this.lastUserInput = currentValue.substring(0, selectionStart);
+      } else {
+        // No selection, this is the actual user input
+        this.lastUserInput = currentValue;
+      }
+      
+      this.handleUrlInputChange();
+    });
+    
     this.urlInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        this.navigate(this.urlInput.value);
+        if (this.selectedSuggestionIndex >= 0 && this.suggestions[this.selectedSuggestionIndex]) {
+          this.navigate(this.suggestions[this.selectedSuggestionIndex]);
+          this.hideSuggestions();
+        } else {
+          // Navigate to whatever is in the input (may include inline completion)
+          const input = this.urlInput.value.trim();
+          this.navigate(input);
+          this.hideSuggestions();
+        }
+      } else if (e.key === 'Escape') {
+        // Restore user's original input and hide suggestions
+        if (this.lastUserInput) {
+          this.urlInput.value = this.lastUserInput;
+        }
+        this.hideSuggestions();
+      } else if (e.key === 'Backspace') {
+        // If there's an inline completion (selection exists), backspace should delete from user's typed input
+        const selectionStart = this.urlInput.selectionStart;
+        const selectionEnd = this.urlInput.selectionEnd;
+        
+        if (selectionStart !== selectionEnd && this.lastUserInput && selectionStart === this.lastUserInput.length) {
+          // There's an autocomplete selection - delete from the user's actual typed input
+          e.preventDefault();
+          if (this.lastUserInput.length > 0) {
+            this.lastUserInput = this.lastUserInput.slice(0, -1);
+            this.urlInput.value = this.lastUserInput;
+            this.urlInput.setSelectionRange(this.lastUserInput.length, this.lastUserInput.length);
+            this.handleUrlInputChange();
+          }
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        this.selectNextSuggestion();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        this.selectPrevSuggestion();
+      } else if (e.key === 'ArrowRight') {
+        // Accept the inline completion when pressing right arrow at end of typed input
+        const selectionStart = this.urlInput.selectionStart;
+        const selectionEnd = this.urlInput.selectionEnd;
+        if (selectionStart !== selectionEnd && selectionStart === this.lastUserInput.length) {
+          // Accept the completion
+          this.urlInput.setSelectionRange(this.urlInput.value.length, this.urlInput.value.length);
+          this.lastUserInput = this.urlInput.value;
+        }
       }
     });
     
     this.urlInput.addEventListener('focus', () => {
       this.urlInput.select();
+      if (this.urlInput.value.trim()) {
+        this.handleUrlInputChange();
+      }
+    });
+    
+    this.urlInput.addEventListener('blur', () => {
+      // Delay hiding to allow click on suggestion
+      setTimeout(() => this.hideSuggestions(), 200);
     });
     
     // Home search
@@ -2477,6 +2554,248 @@ class ForgeBrowser {
     } catch (e) {
       console.error('Failed to remove favorite:', e);
     }
+  }
+
+  // URL Autocomplete Methods
+  handleUrlInputChange() {
+    const query = this.lastUserInput.trim() || this.urlInput.value.trim();
+    console.log('[Autocomplete] Input changed:', query);
+    
+    if (query.length === 0) {
+      this.hideSuggestions();
+      return;
+    }
+    
+    // Debounce API calls
+    clearTimeout(this.suggestionDebounceTimer);
+    this.suggestionDebounceTimer = setTimeout(() => {
+      this.fetchSuggestions(query);
+    }, 150);
+  }
+  
+  async fetchSuggestions(query) {
+    console.log('[Autocomplete] Fetching suggestions for:', query);
+    try {
+      // Get history-based suggestions first (these are prioritized)
+      const historySuggestions = this.getHistorySuggestions(query);
+      console.log('[Autocomplete] History suggestions:', historySuggestions);
+      
+      // Use IPC to fetch from main process (avoids CSP issues)
+      const googleSuggestions = await window.forgeAPI.getUrlSuggestions(query);
+      console.log('[Autocomplete] Google suggestions received:', googleSuggestions);
+      
+      // Merge: history first, then Google (without duplicates)
+      const historyDomains = new Set(historySuggestions.map(s => s.toLowerCase()));
+      const filteredGoogle = googleSuggestions.filter(s => !historyDomains.has(s.toLowerCase()));
+      
+      const mergedSuggestions = [...historySuggestions, ...filteredGoogle];
+      
+      if (mergedSuggestions.length > 0) {
+        this.suggestions = mergedSuggestions;
+        this.historySuggestionCount = historySuggestions.length; // Track how many are from history
+        this.renderSuggestions();
+        
+        // Show inline URL autocompletion
+        this.showInlineCompletion(query);
+      } else {
+        this.hideSuggestions();
+      }
+    } catch (error) {
+      console.error('[Autocomplete] Failed to fetch suggestions:', error);
+      this.hideSuggestions();
+    }
+  }
+  
+  getHistorySuggestions(query) {
+    if (!query || query.length < 2) return [];
+    
+    const queryLower = query.toLowerCase();
+    const domainScores = new Map(); // domain -> {score, url, visitCount}
+    
+    // Scan history for matching domains
+    for (const entry of this.browsingHistory) {
+      try {
+        const url = new URL(entry.url.startsWith('http') ? entry.url : 'https://' + entry.url);
+        const domain = url.hostname.replace(/^www\./, '');
+        const domainLower = domain.toLowerCase();
+        
+        // Check if domain matches the query
+        const domainWithoutTld = domainLower.split('.')[0];
+        
+        if (domainLower.startsWith(queryLower) || domainWithoutTld.startsWith(queryLower)) {
+          const existing = domainScores.get(domain);
+          if (existing) {
+            existing.visitCount++;
+            existing.score += 1; // More visits = higher score
+            // Boost recent visits
+            const ageHours = (Date.now() - entry.timestamp) / (1000 * 60 * 60);
+            if (ageHours < 24) existing.score += 5;
+            else if (ageHours < 168) existing.score += 2; // Within a week
+          } else {
+            let score = 10; // Base score for history match
+            const ageHours = (Date.now() - entry.timestamp) / (1000 * 60 * 60);
+            if (ageHours < 24) score += 5;
+            else if (ageHours < 168) score += 2;
+            
+            domainScores.set(domain, { score, url: entry.url, visitCount: 1 });
+          }
+        }
+      } catch (e) {
+        // Invalid URL, skip
+      }
+    }
+    
+    // Sort by score and return top domains
+    const sorted = [...domainScores.entries()]
+      .sort((a, b) => b[1].score - a[1].score)
+      .slice(0, 5)
+      .map(([domain]) => domain);
+    
+    return sorted;
+  }
+  
+  showInlineCompletion(originalInput) {
+    // Only show inline completion if the input hasn't changed
+    if (this.urlInput.value.trim() !== originalInput) return;
+    
+    const urlSuggestion = this.findUrlSuggestion(originalInput);
+    if (urlSuggestion) {
+      // Normalize the suggestion to a clean domain
+      let completion = urlSuggestion.toLowerCase()
+        .replace(/^(https?:\/\/)?(www\.)?/, '')
+        .split('/')[0];
+      
+      // Only autocomplete if the suggestion starts with what user typed
+      if (completion.startsWith(originalInput.toLowerCase())) {
+        // Show the full completion with the typed portion + rest selected
+        this.urlInput.value = completion;
+        this.urlInput.setSelectionRange(originalInput.length, completion.length);
+      }
+    }
+  }
+  
+  renderSuggestions() {
+    if (this.suggestions.length === 0) {
+      this.hideSuggestions();
+      return;
+    }
+    
+    this.urlSuggestions.innerHTML = '';
+    this.selectedSuggestionIndex = -1;
+    
+    this.suggestions.forEach((suggestion, index) => {
+      const item = document.createElement('div');
+      item.className = 'suggestion-item';
+      
+      // Mark history items with an icon
+      const isFromHistory = index < (this.historySuggestionCount || 0);
+      if (isFromHistory) {
+        item.classList.add('from-history');
+        const icon = document.createElement('span');
+        icon.className = 'suggestion-icon';
+        icon.innerHTML = '🕐';
+        item.appendChild(icon);
+      }
+      
+      const text = document.createElement('span');
+      text.textContent = suggestion;
+      item.appendChild(text);
+      
+      item.addEventListener('mouseenter', () => {
+        this.selectedSuggestionIndex = index;
+        this.updateSuggestionSelection();
+      });
+      
+      item.addEventListener('click', () => {
+        this.navigate(suggestion);
+        this.hideSuggestions();
+      });
+      
+      this.urlSuggestions.appendChild(item);
+    });
+    
+    this.urlSuggestions.classList.remove('hidden');
+    this.updateSuggestionSelection();
+  }
+  
+  selectNextSuggestion() {
+    if (this.suggestions.length === 0) return;
+    
+    this.selectedSuggestionIndex = (this.selectedSuggestionIndex + 1) % this.suggestions.length;
+    this.updateSuggestionSelection();
+  }
+  
+  selectPrevSuggestion() {
+    if (this.suggestions.length === 0) return;
+    
+    this.selectedSuggestionIndex = this.selectedSuggestionIndex <= 0
+      ? this.suggestions.length - 1
+      : this.selectedSuggestionIndex - 1;
+    this.updateSuggestionSelection();
+  }
+  
+  updateSuggestionSelection() {
+    const items = this.urlSuggestions.querySelectorAll('.suggestion-item');
+    items.forEach((item, index) => {
+      if (index === this.selectedSuggestionIndex) {
+        item.classList.add('selected');
+      } else {
+        item.classList.remove('selected');
+      }
+    });
+  }
+  
+  hideSuggestions() {
+    this.urlSuggestions.classList.add('hidden');
+    this.suggestions = [];
+    this.selectedSuggestionIndex = -1;
+  }
+  
+  // Find a URL suggestion that matches the user's input
+  findUrlSuggestion(input) {
+    if (!input || input.includes(' ') || this.suggestions.length === 0) {
+      return null;
+    }
+    
+    const inputLower = input.toLowerCase();
+    
+    // Common TLDs to look for
+    const tlds = ['.com', '.org', '.net', '.tv', '.io', '.co', '.edu', '.gov', '.me', '.app', '.dev', '.gg'];
+    
+    // First, prioritize history suggestions (they're at the start of the array)
+    const historyCount = this.historySuggestionCount || 0;
+    
+    // Check history suggestions first - these are domains that the user has visited
+    for (let i = 0; i < historyCount && i < this.suggestions.length; i++) {
+      const suggestion = this.suggestions[i];
+      const suggestionLower = suggestion.toLowerCase();
+      const domainWithoutTld = suggestionLower.split('.')[0];
+      
+      // History items are already domains, check if they match
+      if (suggestionLower.startsWith(inputLower) || domainWithoutTld.startsWith(inputLower)) {
+        return suggestion;
+      }
+    }
+    
+    // Then look at Google suggestions for URL-like matches
+    for (let i = historyCount; i < this.suggestions.length; i++) {
+      const suggestion = this.suggestions[i];
+      const suggestionLower = suggestion.toLowerCase();
+      
+      // Check if suggestion contains a TLD and starts similarly to input
+      const hasTld = tlds.some(tld => suggestionLower.includes(tld));
+      
+      if (hasTld) {
+        // Check if the domain part starts with what user typed
+        // e.g., "twitc" matches "twitch.tv"
+        const domainPart = suggestionLower.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+        if (domainPart.startsWith(inputLower) || domainPart.replace(/\.[^.]+$/, '').startsWith(inputLower)) {
+          return suggestion;
+        }
+      }
+    }
+    
+    return null;
   }
 }
 

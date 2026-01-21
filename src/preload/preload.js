@@ -59,6 +59,9 @@ contextBridge.exposeInMainWorld('forgeAPI', {
     remove: (slotIndex) => ipcRenderer.invoke('favorites-remove', slotIndex)
   },
   
+  // URL Autocomplete
+  getUrlSuggestions: (query) => ipcRenderer.invoke('get-url-suggestions', query),
+  
   // Auto-updater
   updates: {
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

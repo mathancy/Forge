@@ -315,6 +315,35 @@ ipcMain.handle('favorites-remove', (event, slotIndex) => {
   return favoritesService.removeFavorite(slotIndex);
 });
 
+// URL Autocomplete IPC handler
+ipcMain.handle('get-url-suggestions', async (event, query) => {
+  try {
+    const https = require('https');
+    const url = `https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(query)}`;
+    
+    return new Promise((resolve, reject) => {
+      https.get(url, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            resolve(parsed[1] || []);
+          } catch (e) {
+            resolve([]);
+          }
+        });
+      }).on('error', (e) => {
+        console.error('Suggestions fetch error:', e);
+        resolve([]);
+      });
+    });
+  } catch (e) {
+    console.error('Suggestions error:', e);
+    return [];
+  }
+});
+
 // Load credentials on startup
 app.whenReady().then(() => {
   loadGoogleCredentials();
