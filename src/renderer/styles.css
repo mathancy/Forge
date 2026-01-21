@@ -1787,6 +1787,29 @@ body.ai-panel-open #statusbar {
   transform: translateX(16px);
 }
 
+.menu-toggle.enabled {
+  background: var(--success);
+}
+
+.menu-toggle.enabled::after {
+  transform: translateX(16px);
+}
+
+/* Ad-blocker stats badge */
+.adblock-stats {
+  position: absolute;
+  right: 56px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 30px;
+  text-align: center;
+}
+
 /* Favorites button in navbar */
 .favorites-btn {
   margin-right: 4px;

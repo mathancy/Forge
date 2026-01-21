@@ -6,12 +6,22 @@ const ChromeImporter = require('./chrome-importer');
 const AIService = require('./ai-service');
 const autoUpdaterService = require('./auto-updater');
 const FavoritesService = require('./favorites-service');
+const { getAdBlocker, getCosmeticInjector, getScriptInjector } = require('./ad-blocker');
 
 // Initialize Chrome Importer
 const chromeImporter = new ChromeImporter();
 
 // Initialize Favorites Service
 const favoritesService = new FavoritesService();
+
+// Initialize Ad Blocker (network blocking)
+const adBlocker = getAdBlocker();
+
+// Initialize Cosmetic Injector (element hiding)
+const cosmeticInjector = getCosmeticInjector();
+
+// Initialize Script Injector (YouTube ad blocking)
+const scriptInjector = getScriptInjector();
 
 // AI Service will be initialized after app is ready
 let aiService = null;
@@ -94,10 +104,10 @@ function createWindow() {
   // Load the browser UI
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
-  // DevTools can be opened via menu later
-  // if (process.argv.includes('--enable-logging')) {
-  //   mainWindow.webContents.openDevTools({ mode: 'detach' });
-  // }
+  // Open DevTools in development mode
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -225,7 +235,77 @@ ipcMain.handle('create-new-window', (event, url) => {
 });
 
 // Future: Ad-blocker will be implemented here
-// ipcMain.handle('toggle-adblock', (event, enabled) => { ... });
+// Ad-blocker IPC Handlers
+ipcMain.handle('adblock-get-status', () => {
+  return {
+    enabled: adBlocker.isEnabled(),
+    stats: adBlocker.getStats(),
+    enabledRulesets: adBlocker.getEnabledRulesets(),
+    availableRulesets: adBlocker.getAvailableRulesets()
+  };
+});
+
+ipcMain.handle('adblock-set-enabled', (event, enabled) => {
+  adBlocker.setEnabled(enabled);
+  return { success: true, enabled };
+});
+
+ipcMain.handle('adblock-get-stats', () => {
+  return adBlocker.getStats();
+});
+
+ipcMain.handle('adblock-reset-stats', () => {
+  adBlocker.resetStats();
+  return { success: true };
+});
+
+ipcMain.handle('adblock-get-rulesets', () => {
+  return {
+    available: adBlocker.getAvailableRulesets(),
+    enabled: adBlocker.getEnabledRulesets()
+  };
+});
+
+ipcMain.handle('adblock-set-rulesets', async (event, rulesetIds) => {
+  try {
+    await adBlocker.setEnabledRulesets(rulesetIds);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Cosmetic Filter IPC Handlers
+ipcMain.handle('cosmetic-get-status', () => {
+  return cosmeticInjector.getStats();
+});
+
+ipcMain.handle('cosmetic-set-enabled', (event, enabled) => {
+  cosmeticInjector.setEnabled(enabled);
+  return { success: true, enabled };
+});
+
+ipcMain.handle('cosmetic-get-css', (event, url) => {
+  return cosmeticInjector.getCSSForUrl(url);
+});
+
+// Script Injection IPC Handlers (YouTube ad blocking)
+ipcMain.handle('script-get-status', () => {
+  return scriptInjector.getStats();
+});
+
+ipcMain.handle('script-set-enabled', (event, enabled) => {
+  scriptInjector.setEnabled(enabled);
+  return { success: true, enabled };
+});
+
+ipcMain.handle('script-get-for-url', (event, url) => {
+  const script = scriptInjector.getScriptForUrl(url);
+  if (script) {
+    scriptInjector.trackInjection();
+  }
+  return { script, hasScript: !!script };
+});
 
 // Google OAuth IPC Handlers
 ipcMain.handle('google-auth-status', () => {
@@ -349,4 +429,36 @@ app.whenReady().then(() => {
   loadGoogleCredentials();
   aiService = new AIService(app);
   favoritesService.initialize();
+  
+  // Initialize ad-blocker with bundled filter lists
+  const rulesDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'filter-lists')
+    : path.join(__dirname, '../../filter-lists');
+  
+  // Create filter-lists directory if it doesn't exist
+  if (!fs.existsSync(rulesDir)) {
+    fs.mkdirSync(rulesDir, { recursive: true });
+    console.log('[AdBlocker] Created filter-lists directory:', rulesDir);
+  }
+  
+  // Initialize network request blocking (with YouTube-specific rules)
+  adBlocker.init(rulesDir, { enabledRulesets: ['default', 'youtube'] }).catch(err => {
+    console.error('[AdBlocker] Initialization failed:', err);
+  });
+  
+  // Initialize cosmetic filtering (element hiding)
+  try {
+    const cosmeticStats = cosmeticInjector.init(rulesDir);
+    console.log('[Cosmetic Injector] Ready with', cosmeticStats.genericCount, 'generic selectors');
+  } catch (err) {
+    console.error('[Cosmetic Injector] Initialization failed:', err);
+  }
+  
+  // Initialize script injection (YouTube ad skipping)
+  try {
+    const scriptStats = scriptInjector.init(rulesDir);
+    console.log('[Script Injector] Ready with', scriptStats.sitesCovered, 'site scripts (YouTube, etc.)');
+  } catch (err) {
+    console.error('[Script Injector] Initialization failed:', err);
+  }
 });

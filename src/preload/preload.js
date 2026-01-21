@@ -73,6 +73,27 @@ contextBridge.exposeInMainWorld('forgeAPI', {
     }
   },
   
-  // Future: Ad-blocker controls
-  // toggleAdBlock: (enabled) => ipcRenderer.invoke('toggle-adblock', enabled),
+  // Ad-blocker controls
+  adBlocker: {
+    getStatus: () => ipcRenderer.invoke('adblock-get-status'),
+    setEnabled: (enabled) => ipcRenderer.invoke('adblock-set-enabled', enabled),
+    getStats: () => ipcRenderer.invoke('adblock-get-stats'),
+    resetStats: () => ipcRenderer.invoke('adblock-reset-stats'),
+    getRulesets: () => ipcRenderer.invoke('adblock-get-rulesets'),
+    setRulesets: (rulesetIds) => ipcRenderer.invoke('adblock-set-rulesets', rulesetIds)
+  },
+  
+  // Cosmetic filter controls (element hiding)
+  cosmeticFilter: {
+    getStatus: () => ipcRenderer.invoke('cosmetic-get-status'),
+    setEnabled: (enabled) => ipcRenderer.invoke('cosmetic-set-enabled', enabled),
+    getCSS: (url) => ipcRenderer.invoke('cosmetic-get-css', url)
+  },
+  
+  // Script injection controls (YouTube ad blocking)
+  scriptInjector: {
+    getStatus: () => ipcRenderer.invoke('script-get-status'),
+    setEnabled: (enabled) => ipcRenderer.invoke('script-set-enabled', enabled),
+    getScript: (url) => ipcRenderer.invoke('script-get-for-url', url)
+  },
 });

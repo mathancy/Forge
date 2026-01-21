@@ -93,6 +93,11 @@ class ForgeBrowser {
     this.tabContextMenu = document.getElementById('tab-context-menu');
     this.contextMenuTabId = null;
     
+    // Webview context menu
+    this.webviewContextMenu = document.getElementById('webview-context-menu');
+    this.contextMenuWebview = null;
+    this.contextMenuParams = null;
+    
     // Main menu
     this.btnMenu = document.getElementById('btn-menu');
     this.mainMenu = document.getElementById('main-menu');
@@ -153,6 +158,14 @@ class ForgeBrowser {
     this.favoritesEnabled = false;
     this.favorites = [];
     this.editingFavoriteSlot = null;
+    
+    // Ad-blocker elements
+    this.adblockToggle = document.getElementById('adblock-toggle');
+    this.adblockStats = document.getElementById('adblock-stats');
+    
+    // Ad-blocker state
+    this.adblockEnabled = true;
+    this.adblockBlockedCount = 0;
     
     // Hide favorites button until settings load
     this.btnFavorites.style.display = 'none';
@@ -322,6 +335,22 @@ class ForgeBrowser {
       }
     });
     
+    // Webview context menu item clicks
+    this.webviewContextMenu.addEventListener('click', (e) => {
+      const item = e.target.closest('.context-menu-item');
+      if (item) {
+        const action = item.dataset.action;
+        this.handleWebviewContextMenuAction(action);
+      }
+    });
+    
+    // Close webview context menu on click outside
+    document.addEventListener('click', (e) => {
+      if (!this.webviewContextMenu.contains(e.target)) {
+        this.hideWebviewContextMenu();
+      }
+    });
+    
     // Main menu button click
     this.btnMenu.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -368,6 +397,9 @@ class ForgeBrowser {
     
     // Initialize Favorites
     this.initFavorites();
+    
+    // Initialize Ad Blocker
+    this.initAdBlocker();
     
     // Initialize Google auth status
     this.updateGoogleAuthStatus();
@@ -507,11 +539,13 @@ class ForgeBrowser {
     
     // Webview event handlers
     webview.addEventListener('did-start-loading', () => {
+      console.log('[Webview] did-start-loading event fired');
       this.updateStatus('Loading...');
       this.updateTabLoading(tabId, true);
     });
     
     webview.addEventListener('did-stop-loading', () => {
+      console.log('[Webview] did-stop-loading event fired');
       this.updateStatus('Ready');
       this.updateTabLoading(tabId, false);
     });
@@ -527,6 +561,7 @@ class ForgeBrowser {
     });
     
     webview.addEventListener('did-navigate', (e) => {
+      console.log('[Webview] did-navigate event fired, URL:', e.url);
       const tab = this.tabs.find(t => t.id === tabId);
       if (tabId === this.activeTabId) {
         this.urlInput.value = e.url;
@@ -538,6 +573,25 @@ class ForgeBrowser {
         const title = tab ? tab.title : 'New Tab';
         const favicon = tab ? tab.favicon : null;
         this.addToHistory(e.url, title, favicon);
+      }
+      
+      // Inject cosmetic CSS to hide ad elements
+      this.injectCosmeticCSS(webview, e.url);
+      // Inject ad-blocking scripts (YouTube, etc.)
+      this.injectAdBlockScript(webview, e.url);
+    });
+    
+    // Inject scripts as early as possible for YouTube
+    webview.addEventListener('dom-ready', () => {
+      try {
+        const url = webview.getURL();
+        console.log('[Webview] dom-ready event, URL:', url);
+        if (url) {
+          this.injectAdBlockScript(webview, url);
+          this.injectCosmeticCSS(webview, url);
+        }
+      } catch (e) {
+        console.error('[Webview] Error in dom-ready handler:', e);
       }
     });
     
@@ -553,12 +607,22 @@ class ForgeBrowser {
         const title = tab ? tab.title : 'New Tab';
         const favicon = tab ? tab.favicon : null;
         this.addToHistory(e.url, title, favicon);
+        
+        // Re-inject cosmetic CSS for SPA navigations
+        this.injectCosmeticCSS(webview, e.url);
+        // Re-inject ad-blocking scripts for SPA navigations
+        this.injectAdBlockScript(webview, e.url);
       }
     });
     
     webview.addEventListener('new-window', (e) => {
       // Open new windows in a new tab
       this.createTab(e.url);
+    });
+    
+    // Context menu for webview
+    webview.addEventListener('context-menu', (e) => {
+      this.showWebviewContextMenu(e, webview);
     });
     
     this.browserContent.appendChild(webview);
@@ -1135,6 +1199,90 @@ class ForgeBrowser {
     this.contextMenuTabId = null;
   }
 
+  showWebviewContextMenu(e, webview) {
+    this.contextMenuWebview = webview;
+    this.contextMenuParams = e.params;
+    
+    // Show/hide link-specific items
+    const hasLink = e.params.linkURL && e.params.linkURL.length > 0;
+    const copyLinkItem = document.getElementById('ctx-copy-link');
+    const openLinkItem = document.getElementById('ctx-open-link');
+    const linkSeparator = document.getElementById('ctx-link-separator');
+    
+    if (copyLinkItem) copyLinkItem.style.display = hasLink ? 'flex' : 'none';
+    if (openLinkItem) openLinkItem.style.display = hasLink ? 'flex' : 'none';
+    if (linkSeparator) linkSeparator.style.display = hasLink ? 'block' : 'none';
+    
+    // Show the menu
+    this.webviewContextMenu.classList.remove('hidden');
+    
+    // Position at click location
+    this.webviewContextMenu.style.left = `${e.params.x}px`;
+    this.webviewContextMenu.style.top = `${e.params.y}px`;
+    
+    // Ensure menu stays within viewport
+    const rect = this.webviewContextMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      this.webviewContextMenu.style.left = `${window.innerWidth - rect.width - 10}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+      this.webviewContextMenu.style.top = `${window.innerHeight - rect.height - 10}px`;
+    }
+  }
+
+  hideWebviewContextMenu() {
+    this.webviewContextMenu.classList.add('hidden');
+    this.contextMenuWebview = null;
+    this.contextMenuParams = null;
+  }
+
+  handleWebviewContextMenuAction(action) {
+    const webview = this.contextMenuWebview;
+    const params = this.contextMenuParams;
+    
+    if (!webview) return;
+    
+    switch(action) {
+      case 'back':
+        if (webview.canGoBack()) webview.goBack();
+        break;
+      case 'forward':
+        if (webview.canGoForward()) webview.goForward();
+        break;
+      case 'reload':
+        webview.reload();
+        break;
+      case 'copy-link':
+        if (params && params.linkURL) {
+          navigator.clipboard.writeText(params.linkURL);
+        }
+        break;
+      case 'open-link-new-tab':
+        if (params && params.linkURL) {
+          this.createTab(params.linkURL);
+        }
+        break;
+      case 'copy':
+        webview.copy();
+        break;
+      case 'paste':
+        webview.paste();
+        break;
+      case 'select-all':
+        webview.selectAll();
+        break;
+      case 'view-source':
+        const url = webview.getURL();
+        this.createTab('view-source:' + url);
+        break;
+      case 'inspect':
+        webview.openDevTools();
+        break;
+    }
+    
+    this.hideWebviewContextMenu();
+  }
+
   handleContextMenuAction(action, element) {
     if (!this.contextMenuTabId) return;
     
@@ -1204,6 +1352,8 @@ class ForgeBrowser {
   }
 
   createWebviewForTab(tab, url) {
+    const self = this; // Preserve reference to Browser instance
+    
     // Create webview
     const webview = document.createElement('webview');
     webview.id = tab.id;
@@ -1213,53 +1363,84 @@ class ForgeBrowser {
     
     // Webview event handlers
     webview.addEventListener('did-start-loading', () => {
-      this.updateStatus('Loading...');
-      this.updateTabLoading(tab.id, true);
+      console.log('[Webview] did-start-loading (createWebviewForTab)');
+      try { self.updateStatus('Loading...'); } catch(e) {}
+      try { self.updateTabLoading(tab.id, true); } catch(e) {}
     });
     
     webview.addEventListener('did-stop-loading', () => {
-      this.updateStatus('Ready');
-      this.updateTabLoading(tab.id, false);
+      console.log('[Webview] did-stop-loading (createWebviewForTab)');
+      try { self.updateStatus('Ready'); } catch(e) {}
+      try { self.updateTabLoading(tab.id, false); } catch(e) {}
     });
     
     webview.addEventListener('page-title-updated', (e) => {
-      this.updateTabTitle(tab.id, e.title);
+      if (self.updateTabTitle) self.updateTabTitle(tab.id, e.title);
     });
     
     webview.addEventListener('page-favicon-updated', (e) => {
       if (e.favicons && e.favicons.length > 0) {
-        this.updateTabFavicon(tab.id, e.favicons[0]);
+        if (self.updateTabFavicon) self.updateTabFavicon(tab.id, e.favicons[0]);
       }
     });
     
     webview.addEventListener('did-navigate', (e) => {
-      if (tab.id === this.activeTabId) {
-        this.urlInput.value = e.url;
-        this.updateSecurityIndicator(e.url);
+      console.log('[Webview] did-navigate (createWebviewForTab):', e.url);
+      if (tab.id === self.activeTabId) {
+        self.urlInput.value = e.url;
+        if (self.updateSecurityIndicator) self.updateSecurityIndicator(e.url);
       }
       // Add to browsing history (exclude home and internal pages)
       if (!e.url.startsWith('forge://') && !e.url.startsWith('about:')) {
         const title = tab.title || 'New Tab';
         const favicon = tab.favicon || null;
-        this.addToHistory(e.url, title, favicon);
+        if (self.addToHistory) self.addToHistory(e.url, title, favicon);
+      }
+      
+      // Inject cosmetic CSS to hide ad elements
+      if (self.injectCosmeticCSS) self.injectCosmeticCSS(webview, e.url);
+      // Inject ad-blocking scripts (YouTube, etc.)
+      if (self.injectAdBlockScript) self.injectAdBlockScript(webview, e.url);
+    });
+    
+    // Inject scripts as early as possible
+    webview.addEventListener('dom-ready', () => {
+      try {
+        const currentUrl = webview.getURL();
+        console.log('[Webview] dom-ready (createWebviewForTab):', currentUrl);
+        if (currentUrl) {
+          if (self.injectAdBlockScript) self.injectAdBlockScript(webview, currentUrl);
+          if (self.injectCosmeticCSS) self.injectCosmeticCSS(webview, currentUrl);
+        }
+      } catch (e) {
+        console.error('[Webview] Error in dom-ready handler:', e);
       }
     });
     
     webview.addEventListener('did-navigate-in-page', (e) => {
-      if (tab.id === this.activeTabId && e.isMainFrame) {
-        this.urlInput.value = e.url;
-        this.updateSecurityIndicator(e.url);
+      if (tab.id === self.activeTabId && e.isMainFrame) {
+        self.urlInput.value = e.url;
+        if (self.updateSecurityIndicator) self.updateSecurityIndicator(e.url);
       }
       // Add to browsing history for in-page navigation too
       if (e.isMainFrame && !e.url.startsWith('forge://') && !e.url.startsWith('about:')) {
         const title = tab.title || 'New Tab';
         const favicon = tab.favicon || null;
-        this.addToHistory(e.url, title, favicon);
+        if (self.addToHistory) self.addToHistory(e.url, title, favicon);
+        
+        // Re-inject for SPA navigations
+        if (self.injectCosmeticCSS) self.injectCosmeticCSS(webview, e.url);
+        if (self.injectAdBlockScript) self.injectAdBlockScript(webview, e.url);
       }
     });
     
     webview.addEventListener('new-window', (e) => {
-      this.createTab(e.url);
+      if (self.createTab) self.createTab(e.url);
+    });
+    
+    // Context menu for webview
+    webview.addEventListener('context-menu', (e) => {
+      self.showWebviewContextMenu(e, webview);
     });
     
     this.browserContent.appendChild(webview);
@@ -1408,6 +1589,9 @@ class ForgeBrowser {
         break;
       case 'favorites':
         this.toggleFavoritesEnabled();
+        return; // Don't hide menu for toggle
+      case 'adblock':
+        this.toggleAdBlocker();
         return; // Don't hide menu for toggle
       case 'about':
         this.showAboutPanel();
@@ -2553,6 +2737,153 @@ class ForgeBrowser {
       }
     } catch (e) {
       console.error('Failed to remove favorite:', e);
+    }
+  }
+
+  // ==================== Ad Blocker Methods ====================
+  
+  async initAdBlocker() {
+    try {
+      const status = await window.forgeAPI.adBlocker.getStatus();
+      this.adblockEnabled = status.enabled;
+      this.adblockBlockedCount = status.stats.blocked || 0;
+      this.updateAdBlockerUI();
+      
+      // Update stats periodically
+      setInterval(() => this.updateAdBlockerStats(), 5000);
+    } catch (e) {
+      console.error('Failed to initialize ad blocker:', e);
+    }
+  }
+  
+  updateAdBlockerUI() {
+    if (this.adblockEnabled) {
+      this.adblockToggle.classList.add('enabled');
+      this.adblockToggle.classList.remove('inactive');
+    } else {
+      this.adblockToggle.classList.remove('enabled');
+      this.adblockToggle.classList.add('inactive');
+    }
+    this.updateAdBlockerStats();
+  }
+  
+  async updateAdBlockerStats() {
+    try {
+      const stats = await window.forgeAPI.adBlocker.getStats();
+      this.adblockBlockedCount = stats.blocked || 0;
+      
+      if (this.adblockBlockedCount > 0) {
+        this.adblockStats.textContent = this.formatBlockCount(this.adblockBlockedCount);
+        this.adblockStats.style.display = '';
+      } else {
+        this.adblockStats.style.display = 'none';
+      }
+    } catch (e) {
+      // Silently fail on stats update
+    }
+  }
+  
+  formatBlockCount(count) {
+    if (count >= 1000000) {
+      return (count / 1000000).toFixed(1) + 'M';
+    } else if (count >= 1000) {
+      return (count / 1000).toFixed(1) + 'K';
+    }
+    return count.toString();
+  }
+  
+  async toggleAdBlocker() {
+    try {
+      this.adblockEnabled = !this.adblockEnabled;
+      await window.forgeAPI.adBlocker.setEnabled(this.adblockEnabled);
+      this.updateAdBlockerUI();
+    } catch (e) {
+      console.error('Failed to toggle ad blocker:', e);
+      // Revert UI on error
+      this.adblockEnabled = !this.adblockEnabled;
+      this.updateAdBlockerUI();
+    }
+  }
+  
+  // ==================== Cosmetic Filtering Methods ====================
+  
+  /**
+   * Inject cosmetic CSS into a webview to hide ad elements
+   * @param {HTMLWebViewElement} webview - The webview to inject CSS into
+   * @param {string} url - The URL of the page
+   */
+  async injectCosmeticCSS(webview, url) {
+    // Only inject if ad blocker is enabled
+    if (!this.adblockEnabled) {
+      return;
+    }
+    
+    // Skip internal pages
+    if (url.startsWith('forge://') || url.startsWith('about:') || url.startsWith('chrome://')) {
+      return;
+    }
+    
+    try {
+      // Get CSS selectors for this URL from main process
+      const result = await window.forgeAPI.cosmeticFilter.getCSS(url);
+      
+      if (result && result.css && result.selectorCount > 0) {
+        // Inject CSS to hide ad elements
+        await webview.insertCSS(result.css);
+        console.log(`[Cosmetic] Injected ${result.selectorCount} selectors for ${new URL(url).hostname}`);
+      }
+    } catch (e) {
+      console.error('[Cosmetic] Failed to inject CSS:', e);
+    }
+  }
+  
+  // ==================== Script Injection Methods (YouTube) ====================
+  
+  /**
+   * Inject ad-blocking scripts into a webview (primarily for YouTube)
+   * @param {HTMLWebViewElement} webview - The webview to inject into
+   * @param {string} url - The URL of the page
+   */
+  async injectAdBlockScript(webview, url) {
+    // Only inject if ad blocker is enabled
+    if (!this.adblockEnabled) {
+      console.log('[Script] Adblock disabled, skipping injection');
+      return;
+    }
+    
+    // Skip internal pages
+    if (url.startsWith('forge://') || url.startsWith('about:') || url.startsWith('chrome://')) {
+      return;
+    }
+    
+    try {
+      console.log('[Script] Attempting injection for URL:', url);
+      
+      // Get script for this URL from main process
+      const result = await window.forgeAPI.scriptInjector.getScript(url);
+      console.log('[Script] IPC result:', result ? 'received' : 'null', 'hasScript:', result?.hasScript);
+      
+      if (result && result.hasScript && result.script) {
+        console.log('[Script] Got script, length:', result.script.length);
+        
+        // Inject the script - wrap it to ensure it runs and logs
+        const wrappedScript = `
+          try {
+            console.log('[Forge] Script injection starting...');
+            ${result.script}
+            console.log('[Forge] Script injection complete');
+          } catch (e) {
+            console.error('[Forge] Script injection error:', e);
+          }
+        `;
+        
+        await webview.executeJavaScript(wrappedScript, true);
+        console.log('[Script] executeJavaScript completed for', new URL(url).hostname);
+      } else {
+        console.log('[Script] No script for this URL');
+      }
+    } catch (e) {
+      console.error('[Script] Failed to inject script:', e.message);
     }
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "forge-browser",
-  "version": "0.1.22-alpha",
+  "version": "0.1.23-alpha",
   "description": "Forge - A lightweight custom browser by Forgeworks Interactive Limited",
   "main": "src/main/main.js",
   "scripts": {
@@ -49,6 +49,10 @@
       {
         "from": "assets",
         "to": "assets"
+      },
+      {
+        "from": "filter-lists",
+        "to": "filter-lists"
       }
     ],
     "win": {

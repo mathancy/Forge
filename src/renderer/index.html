@@ -122,6 +122,47 @@
       <div class="context-menu-item" data-action="close-right">Close Tabs to the right</div>
     </div>
 
+    <!-- Webview Context Menu -->
+    <div id="webview-context-menu" class="context-menu hidden">
+      <div class="context-menu-item" data-action="back">
+        <img class="menu-icon" src="../../assets/ui-icons/arrow-left.svg" width="16" height="16" alt="">
+        Back
+      </div>
+      <div class="context-menu-item" data-action="forward">
+        <img class="menu-icon" src="../../assets/ui-icons/arrow-right.svg" width="16" height="16" alt="">
+        Forward
+      </div>
+      <div class="context-menu-item" data-action="reload">
+        <img class="menu-icon" src="../../assets/ui-icons/refresh.svg" width="16" height="16" alt="">
+        Reload
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="copy-link" id="ctx-copy-link">
+        Copy Link Address
+      </div>
+      <div class="context-menu-item" data-action="open-link-new-tab" id="ctx-open-link">
+        Open Link in New Tab
+      </div>
+      <div class="context-menu-separator" id="ctx-link-separator"></div>
+      <div class="context-menu-item" data-action="copy">
+        Copy
+      </div>
+      <div class="context-menu-item" data-action="paste">
+        Paste
+      </div>
+      <div class="context-menu-item" data-action="select-all">
+        Select All
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="view-source">
+        View Page Source
+      </div>
+      <div class="context-menu-item" data-action="inspect">
+        <img class="menu-icon" src="../../assets/ui-icons/developer.svg" width="16" height="16" alt="">
+        Inspect Element
+      </div>
+    </div>
+
     <!-- Main Menu Dropdown -->
     <div id="main-menu" class="context-menu hidden">
       <div class="context-menu-item" data-action="google-account" id="menu-google-account">
@@ -137,6 +178,12 @@
         <img class="menu-icon" src="../../assets/ui-icons/heart.svg" width="16" height="16" alt="">
         Favorites
         <span class="menu-toggle" id="favorites-toggle"></span>
+      </div>
+      <div class="context-menu-item has-toggle" data-action="adblock">
+        <img class="menu-icon" src="../../assets/ui-icons/shield.svg" width="16" height="16" alt="">
+        Ad Blocker
+        <span class="menu-toggle enabled" id="adblock-toggle"></span>
+        <span class="adblock-stats" id="adblock-stats"></span>
       </div>
       <div class="context-menu-item" data-action="import-chrome">
         <img class="menu-icon" src="../../assets/ui-icons/import.svg" width="16" height="16" alt="">
