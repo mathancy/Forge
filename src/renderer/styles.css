@@ -292,6 +292,27 @@ body.tab-dragging *::after {
   color: var(--text-primary);
 }
 
+/* Audio icon for tabs (muted/playing) */
+.tab-audio-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.tab-audio-icon.muted {
+  filter: invert(27%) sepia(95%) saturate(5000%) hue-rotate(355deg) brightness(95%) contrast(120%);
+}
+
+.tab-audio-icon.playing {
+  filter: invert(56%) sepia(98%) saturate(1500%) hue-rotate(1deg) brightness(103%) contrast(103%);
+}
+
+.tab:hover .tab-audio-icon {
+  opacity: 1;
+}
+
 .tab-btn {
   width: 32px;
   height: 30px;
@@ -426,6 +447,30 @@ body.tab-dragging *::after {
   color: var(--text-secondary);
 }
 
+/* Ad Counter in URL bar */
+.ad-counter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(255, 140, 50, 0.15);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-right: 4px;
+  cursor: default;
+  user-select: none;
+}
+
+.ad-counter img {
+  filter: invert(56%) sepia(98%) saturate(1500%) hue-rotate(1deg) brightness(103%) contrast(103%);
+}
+
+.ad-counter.hidden {
+  display: none;
+}
+
 /* URL Autocomplete Suggestions */
 .url-suggestions {
   position: absolute;
@@ -438,6 +483,7 @@ body.tab-dragging *::after {
   border-radius: 8px;
   max-height: 400px;
   overflow-y: auto;
+  overflow-x: hidden;
   z-index: 1000;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
@@ -455,7 +501,23 @@ body.tab-dragging *::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Cascade animation */
+  animation: cascadeDown 0.15s ease forwards;
+  opacity: 0;
+  transform: translateY(-8px);
 }
+
+/* Cascade animation delays for suggestion items */
+.url-suggestions > :nth-child(1) { animation-delay: 0ms; }
+.url-suggestions > :nth-child(2) { animation-delay: 25ms; }
+.url-suggestions > :nth-child(3) { animation-delay: 50ms; }
+.url-suggestions > :nth-child(4) { animation-delay: 75ms; }
+.url-suggestions > :nth-child(5) { animation-delay: 100ms; }
+.url-suggestions > :nth-child(6) { animation-delay: 125ms; }
+.url-suggestions > :nth-child(7) { animation-delay: 150ms; }
+.url-suggestions > :nth-child(8) { animation-delay: 175ms; }
+.url-suggestions > :nth-child(9) { animation-delay: 200ms; }
+.url-suggestions > :nth-child(10) { animation-delay: 225ms; }
 
 .suggestion-item:hover,
 .suggestion-item.selected {
@@ -655,6 +717,21 @@ webview.active {
   background: var(--bg-tertiary);
 }
 
+/* Context Menu Overlay - invisible layer to capture clicks outside menus */
+.context-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background: transparent;
+}
+
+.context-menu-overlay.hidden {
+  display: none;
+}
+
 /* Context Menu */
 .context-menu {
   position: fixed;
@@ -694,16 +771,27 @@ webview.active {
   transform: translateY(-8px);
 }
 
-.context-menu-item:nth-child(1) { animation-delay: 0ms; }
-.context-menu-item:nth-child(2) { animation-delay: 30ms; }
-.context-menu-separator:nth-child(3) { animation-delay: 60ms; }
-.context-menu-item:nth-child(4) { animation-delay: 90ms; }
-.context-menu-item:nth-child(5) { animation-delay: 120ms; }
-.context-menu-item:nth-child(6) { animation-delay: 150ms; }
-.context-menu-separator:nth-child(7) { animation-delay: 180ms; }
-.context-menu-item:nth-child(8) { animation-delay: 210ms; }
-.context-menu-item:nth-child(9) { animation-delay: 240ms; }
-.context-menu-item:nth-child(10) { animation-delay: 270ms; }
+/* Cascade animation delays for all context menu children */
+.context-menu > :nth-child(1) { animation-delay: 0ms; }
+.context-menu > :nth-child(2) { animation-delay: 30ms; }
+.context-menu > :nth-child(3) { animation-delay: 60ms; }
+.context-menu > :nth-child(4) { animation-delay: 90ms; }
+.context-menu > :nth-child(5) { animation-delay: 120ms; }
+.context-menu > :nth-child(6) { animation-delay: 150ms; }
+.context-menu > :nth-child(7) { animation-delay: 180ms; }
+.context-menu > :nth-child(8) { animation-delay: 210ms; }
+.context-menu > :nth-child(9) { animation-delay: 240ms; }
+.context-menu > :nth-child(10) { animation-delay: 270ms; }
+.context-menu > :nth-child(11) { animation-delay: 300ms; }
+.context-menu > :nth-child(12) { animation-delay: 330ms; }
+.context-menu > :nth-child(13) { animation-delay: 360ms; }
+.context-menu > :nth-child(14) { animation-delay: 390ms; }
+.context-menu > :nth-child(15) { animation-delay: 420ms; }
+.context-menu > :nth-child(16) { animation-delay: 450ms; }
+.context-menu > :nth-child(17) { animation-delay: 480ms; }
+.context-menu > :nth-child(18) { animation-delay: 510ms; }
+.context-menu > :nth-child(19) { animation-delay: 540ms; }
+.context-menu > :nth-child(20) { animation-delay: 570ms; }
 
 @keyframes cascadeDown {
   from {

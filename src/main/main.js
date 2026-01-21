@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, session, protocol, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const GoogleAuth = require('./google-auth');
@@ -30,8 +30,10 @@ let aiService = null;
 app.setName('Forge');
 
 // Set Windows app user model ID for proper taskbar identification
+// Using a unique ID based on version to bypass icon cache
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.forgeworks.forge');
+  const version = require('../../package.json').version.replace(/[^a-zA-Z0-9]/g, '');
+  app.setAppUserModelId(`Forgeworks.Forge.Browser.${version}`);
 }
 
 // Initialize Google Auth
@@ -76,6 +78,15 @@ const FORGE_CONFIG = {
 };
 
 function createWindow() {
+  // Load icon - use absolute path and verify it exists
+  const iconPath = getAssetPath('forge-logo.ico');
+  console.log('[Icon] Icon path:', iconPath);
+  console.log('[Icon] Icon exists:', fs.existsSync(iconPath));
+  
+  const icon = nativeImage.createFromPath(iconPath);
+  console.log('[Icon] Icon isEmpty:', icon.isEmpty());
+  console.log('[Icon] Icon size:', icon.getSize());
+  
   // Create the browser window with lightweight settings
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -83,7 +94,7 @@ function createWindow() {
     minWidth: 400,
     minHeight: 300,
     title: FORGE_CONFIG.name,
-    icon: getAssetPath('forge-logo.ico'),
+    icon: icon,
     frame: false, // Custom titlebar for lightweight feel
     backgroundColor: '#161616',
     webPreferences: {
@@ -94,6 +105,24 @@ function createWindow() {
       webviewTag: true // Enable webview for browser tabs
     }
   });
+  
+  // Explicitly set the icon for Windows taskbar
+  if (process.platform === 'win32') {
+    mainWindow.setIcon(icon);
+    console.log('[Icon] Set window icon for Windows');
+    
+    // Set icon again after window is shown (taskbar timing issue)
+    mainWindow.once('show', () => {
+      mainWindow.setIcon(icon);
+      console.log('[Icon] Re-set icon on show event');
+    });
+    
+    // Also set on focus to catch any missed updates
+    mainWindow.once('focus', () => {
+      mainWindow.setIcon(icon);
+      console.log('[Icon] Re-set icon on focus event');
+    });
+  }
 
   // Set custom user agent
   const chromeVersion = process.versions.chrome;
@@ -104,10 +133,7 @@ function createWindow() {
   // Load the browser UI
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
-  // Open DevTools in development mode
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
+  // DevTools can be opened manually via menu or keyboard shortcut (Ctrl+Shift+I)
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -125,6 +151,16 @@ function createWindow() {
 
 // App lifecycle
 app.whenReady().then(() => {
+  // Set app icon for Windows taskbar/dock
+  if (process.platform === 'win32') {
+    const iconPath = getAssetPath('forge-logo.ico');
+    if (fs.existsSync(iconPath)) {
+      const icon = nativeImage.createFromPath(iconPath);
+      app.setAppUserModelId('com.forgeworks.forge');
+      // Note: Electron doesn't support app.setIcon(), icon is set per-window
+    }
+  }
+  
   // Register custom protocol for assets
   protocol.registerFileProtocol('forge-asset', (request, callback) => {
     const url = request.url.replace('forge-asset://', '');
@@ -305,6 +341,53 @@ ipcMain.handle('script-get-for-url', (event, url) => {
     scriptInjector.trackInjection();
   }
   return { script, hasScript: !!script };
+});
+
+// Tab audio state handler
+ipcMain.handle('is-webcontents-audible', (event, webContentsId) => {
+  try {
+    const { webContents } = require('electron');
+    const wc = webContents.fromId(webContentsId);
+    if (wc) {
+      return wc.isCurrentlyAudible();
+    }
+  } catch (e) {
+    // WebContents may not exist
+  }
+  return false;
+});
+
+// DevTools IPC handlers
+ipcMain.handle('devtools-open', (event, targetWebContentsId, devtoolsWebContentsId) => {
+  try {
+    const { webContents } = require('electron');
+    const targetWC = webContents.fromId(targetWebContentsId);
+    const devtoolsWC = webContents.fromId(devtoolsWebContentsId);
+    
+    if (targetWC && devtoolsWC) {
+      targetWC.setDevToolsWebContents(devtoolsWC);
+      targetWC.openDevTools({ mode: 'detach' });
+      return true;
+    }
+  } catch (e) {
+    console.error('[DevTools] Failed to open:', e);
+  }
+  return false;
+});
+
+ipcMain.handle('devtools-close', (event, targetWebContentsId) => {
+  try {
+    const { webContents } = require('electron');
+    const targetWC = webContents.fromId(targetWebContentsId);
+    
+    if (targetWC) {
+      targetWC.closeDevTools();
+      return true;
+    }
+  } catch (e) {
+    console.error('[DevTools] Failed to close:', e);
+  }
+  return false;
 });
 
 // Google OAuth IPC Handlers

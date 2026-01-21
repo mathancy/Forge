@@ -76,8 +76,17 @@ class ScriptInjector {
   const CONFIG = {
     checkInterval: 50,       // Check for ads every 50ms (faster)
     batchRemoveInterval: 500, // Remove promoted content every 500ms
-    debug: true              // Enable logging
+    debug: false             // Disable verbose logging
   };
+  
+  // Track total ads blocked for this page
+  let totalAdsBlocked = 0;
+  
+  function notifyAdBlocked(count = 1) {
+    totalAdsBlocked += count;
+    // Use special console log format that renderer can intercept via console-message event
+    console.log('[FORGE_AD_BLOCKED]', totalAdsBlocked);
+  }
   
   function log(...args) {
     if (CONFIG.debug) {
@@ -251,6 +260,7 @@ class ScriptInjector {
         video.muted = savedMuted;
         video.volume = savedVolume;
         log('Ad ended, restored playback settings');
+        notifyAdBlocked(1); // Count the skipped video ad
         wasPlayingAd = false;
       }
       return;
@@ -397,6 +407,7 @@ class ScriptInjector {
     
     if (removed > 0) {
       log('Removed', removed, 'ad elements');
+      notifyAdBlocked(removed);
     }
     
     return removed;

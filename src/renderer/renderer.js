@@ -79,6 +79,8 @@ class ForgeBrowser {
     this.btnHome = document.getElementById('btn-home');
     this.urlInput = document.getElementById('url-input');
     this.securityIndicator = document.getElementById('security-indicator');
+    this.adCounter = document.getElementById('ad-counter');
+    this.adCounterValue = document.getElementById('ad-counter-value');
     
     // Content
     this.browserContent = document.getElementById('browser-content');
@@ -95,6 +97,7 @@ class ForgeBrowser {
     
     // Webview context menu
     this.webviewContextMenu = document.getElementById('webview-context-menu');
+    this.contextMenuOverlay = document.getElementById('context-menu-overlay');
     this.contextMenuWebview = null;
     this.contextMenuParams = null;
     
@@ -125,7 +128,7 @@ class ForgeBrowser {
     this.btnCloseAbout = document.getElementById('btn-close-about');
     this.aboutVersion = document.getElementById('about-version');
     this.btnCheckUpdates = document.getElementById('btn-check-updates');
-    this.updateStatus = document.getElementById('update-status');
+    this.updateStatusElement = document.getElementById('update-status');
     
     // AI Assistant elements
     this.aiButtons = document.getElementById('ai-buttons');
@@ -313,15 +316,23 @@ class ForgeBrowser {
       }
     });
     
-    // Close context menu on click outside
+    // Global click handler to close all popups/menus
     document.addEventListener('click', (e) => {
-      // Close tab context menu
+      // Close tab context menu if clicking outside
       if (!this.tabContextMenu.contains(e.target) && !e.target.closest('.tab')) {
         this.hideContextMenu();
       }
-      // Close main menu
+      // Close webview context menu if clicking outside
+      if (!this.webviewContextMenu.contains(e.target)) {
+        this.hideWebviewContextMenu();
+      }
+      // Close main menu if clicking outside
       if (!this.mainMenu.contains(e.target) && !e.target.closest('#btn-menu')) {
         this.hideMainMenu();
+      }
+      // Close URL suggestions if clicking outside the URL container
+      if (!e.target.closest('.url-container')) {
+        this.hideSuggestions();
       }
     });
     
@@ -338,17 +349,20 @@ class ForgeBrowser {
     // Webview context menu item clicks
     this.webviewContextMenu.addEventListener('click', (e) => {
       const item = e.target.closest('.context-menu-item');
-      if (item) {
+      if (item && !item.classList.contains('disabled')) {
         const action = item.dataset.action;
         this.handleWebviewContextMenuAction(action);
       }
     });
     
-    // Close webview context menu on click outside
-    document.addEventListener('click', (e) => {
-      if (!this.webviewContextMenu.contains(e.target)) {
-        this.hideWebviewContextMenu();
-      }
+    // Context menu overlay click - closes webview context menu
+    this.contextMenuOverlay.addEventListener('click', () => {
+      this.hideWebviewContextMenu();
+    });
+    
+    // Close popups when clicking on browser content area (welcome page area)
+    this.browserContent.addEventListener('click', () => {
+      this.closeAllPopups();
     });
     
     // Main menu button click
@@ -539,13 +553,11 @@ class ForgeBrowser {
     
     // Webview event handlers
     webview.addEventListener('did-start-loading', () => {
-      console.log('[Webview] did-start-loading event fired');
       this.updateStatus('Loading...');
       this.updateTabLoading(tabId, true);
     });
     
     webview.addEventListener('did-stop-loading', () => {
-      console.log('[Webview] did-stop-loading event fired');
       this.updateStatus('Ready');
       this.updateTabLoading(tabId, false);
     });
@@ -561,7 +573,6 @@ class ForgeBrowser {
     });
     
     webview.addEventListener('did-navigate', (e) => {
-      console.log('[Webview] did-navigate event fired, URL:', e.url);
       const tab = this.tabs.find(t => t.id === tabId);
       if (tabId === this.activeTabId) {
         this.urlInput.value = e.url;
@@ -585,7 +596,6 @@ class ForgeBrowser {
     webview.addEventListener('dom-ready', () => {
       try {
         const url = webview.getURL();
-        console.log('[Webview] dom-ready event, URL:', url);
         if (url) {
           this.injectAdBlockScript(webview, url);
           this.injectCosmeticCSS(webview, url);
@@ -625,6 +635,42 @@ class ForgeBrowser {
       this.showWebviewContextMenu(e, webview);
     });
     
+    // Close all popups when webview gets focus (user clicks on it)
+    webview.addEventListener('focus', () => {
+      this.closeAllPopups();
+    });
+    
+    // Audio playing detection - use IPC to check audio state from main process
+    const checkAudioState = async () => {
+      const tab = this.tabs.find(t => t.id === tabId);
+      if (!tab || !tab.webview) return;
+      
+      try {
+        const webContentsId = webview.getWebContentsId ? webview.getWebContentsId() : null;
+        if (webContentsId) {
+          const isCurrentlyAudible = await window.forgeAPI.isWebContentsAudible(webContentsId);
+          const wasPlaying = tab.isPlayingAudio;
+          
+          if (isCurrentlyAudible !== wasPlaying) {
+            tab.isPlayingAudio = isCurrentlyAudible;
+            this.updateTabAudioIcon(tabId);
+          }
+        }
+      } catch (e) {
+        // Webview might not be ready yet
+      }
+    };
+    
+    // Start audio checking after webview is ready
+    webview.addEventListener('dom-ready', () => {
+      const audioCheckInterval = setInterval(checkAudioState, 500);
+      const tab = this.tabs.find(t => t.id === tabId);
+      if (tab) {
+        tab.audioCheckInterval = audioCheckInterval;
+      }
+      checkAudioState();
+    });
+    
     this.browserContent.appendChild(webview);
     
     // Store tab info with history tracking
@@ -635,7 +681,10 @@ class ForgeBrowser {
       title: 'New Tab',
       url: '',
       history: [], // Custom history stack
-      historyIndex: -1 // Current position in history
+      historyIndex: -1, // Current position in history
+      isPlayingAudio: false,
+      isMuted: false,
+      adBlockCount: 0 // Track ads blocked for this tab
     });
     
     // Switch to new tab and navigate if URL provided
@@ -653,6 +702,11 @@ class ForgeBrowser {
     if (tabIndex === -1) return;
     
     const tab = this.tabs[tabIndex];
+    
+    // Clean up audio check interval
+    if (tab.audioCheckInterval) {
+      clearInterval(tab.audioCheckInterval);
+    }
     
     if (!skipAnimation) {
       // Add closing animation
@@ -706,6 +760,9 @@ class ForgeBrowser {
     if (tab) {
       tab.element.classList.add('active');
       this.activeTabId = tabId;
+      
+      // Update ad counter for this tab
+      this.updateAdCounter(tab.adsBlocked || 0);
       
       if (tab.isHome) {
         // Show welcome page for home tab
@@ -993,6 +1050,22 @@ class ForgeBrowser {
     }
   }
   
+  /**
+   * Update the ad counter display in the URL bar
+   * @param {number} count - Number of ads blocked
+   */
+  updateAdCounter(count) {
+    if (this.adCounter && this.adCounterValue) {
+      this.adCounter.classList.remove('hidden'); // Remove initial hidden class
+      if (count > 0 && this.adblockEnabled) {
+        this.adCounterValue.textContent = count;
+        this.adCounter.style.display = 'flex';
+      } else {
+        this.adCounter.style.display = 'none';
+      }
+    }
+  }
+  
   escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -1170,6 +1243,9 @@ class ForgeBrowser {
     this.contextMenuTabId = tabId;
     this.tabContextMenu.classList.remove('hidden');
     
+    const tab = this.tabs.find(t => t.id === tabId);
+    const tabIndex = this.tabs.findIndex(t => t.id === tabId);
+    
     // Disable/enable menu items based on context
     const moveToNewWindowItem = this.tabContextMenu.querySelector('[data-action="move-to-new-window"]');
     if (moveToNewWindowItem) {
@@ -1177,6 +1253,33 @@ class ForgeBrowser {
         moveToNewWindowItem.classList.add('disabled');
       } else {
         moveToNewWindowItem.classList.remove('disabled');
+      }
+    }
+    
+    // Update mute menu item text based on current state
+    const muteItem = this.tabContextMenu.querySelector('[data-action="mute"]');
+    if (muteItem && tab) {
+      const isMuted = tab.webview ? tab.webview.isAudioMuted() : false;
+      muteItem.textContent = isMuted ? 'Unmute this Tab' : 'Mute this Tab';
+    }
+    
+    // Disable "Close other Tabs" if only one tab
+    const closeOthersItem = this.tabContextMenu.querySelector('[data-action="close-others"]');
+    if (closeOthersItem) {
+      if (this.tabs.length <= 1) {
+        closeOthersItem.classList.add('disabled');
+      } else {
+        closeOthersItem.classList.remove('disabled');
+      }
+    }
+    
+    // Disable "Close Tabs to the right" if no tabs to the right
+    const closeRightItem = this.tabContextMenu.querySelector('[data-action="close-right"]');
+    if (closeRightItem) {
+      if (tabIndex === -1 || tabIndex >= this.tabs.length - 1) {
+        closeRightItem.classList.add('disabled');
+      } else {
+        closeRightItem.classList.remove('disabled');
       }
     }
     
@@ -1199,9 +1302,38 @@ class ForgeBrowser {
     this.contextMenuTabId = null;
   }
 
+  /**
+   * Close all popup menus (context menus, main menu, URL suggestions)
+   */
+  closeAllPopups() {
+    this.hideContextMenu();
+    this.hideWebviewContextMenu();
+    this.hideMainMenu();
+    this.hideSuggestions();
+  }
+
   showWebviewContextMenu(e, webview) {
     this.contextMenuWebview = webview;
     this.contextMenuParams = e.params;
+    
+    // Enable/disable back/forward based on navigation state
+    const backItem = document.getElementById('ctx-back');
+    const forwardItem = document.getElementById('ctx-forward');
+    
+    if (backItem) {
+      if (webview.canGoBack()) {
+        backItem.classList.remove('disabled');
+      } else {
+        backItem.classList.add('disabled');
+      }
+    }
+    if (forwardItem) {
+      if (webview.canGoForward()) {
+        forwardItem.classList.remove('disabled');
+      } else {
+        forwardItem.classList.add('disabled');
+      }
+    }
     
     // Show/hide link-specific items
     const hasLink = e.params.linkURL && e.params.linkURL.length > 0;
@@ -1212,6 +1344,9 @@ class ForgeBrowser {
     if (copyLinkItem) copyLinkItem.style.display = hasLink ? 'flex' : 'none';
     if (openLinkItem) openLinkItem.style.display = hasLink ? 'flex' : 'none';
     if (linkSeparator) linkSeparator.style.display = hasLink ? 'block' : 'none';
+    
+    // Show the overlay first (captures clicks outside the menu)
+    this.contextMenuOverlay.classList.remove('hidden');
     
     // Show the menu
     this.webviewContextMenu.classList.remove('hidden');
@@ -1232,6 +1367,7 @@ class ForgeBrowser {
 
   hideWebviewContextMenu() {
     this.webviewContextMenu.classList.add('hidden');
+    this.contextMenuOverlay.classList.add('hidden');
     this.contextMenuWebview = null;
     this.contextMenuParams = null;
   }
@@ -1272,8 +1408,8 @@ class ForgeBrowser {
         webview.selectAll();
         break;
       case 'view-source':
-        const url = webview.getURL();
-        this.createTab('view-source:' + url);
+        // Open our custom source viewer to avoid Chrome's buggy view-source line wrap
+        this.viewPageSource(webview);
         break;
       case 'inspect':
         webview.openDevTools();
@@ -1296,10 +1432,24 @@ class ForgeBrowser {
       case 'move-to-new-window':
         this.moveTabToNewWindow(this.contextMenuTabId);
         break;
+      case 'reload':
+        this.reloadTab(this.contextMenuTabId);
+        break;
+      case 'duplicate':
+        this.duplicateTab(this.contextMenuTabId);
+        break;
+      case 'mute':
+        this.toggleTabMute(this.contextMenuTabId);
+        break;
       case 'close':
         this.closeTab(this.contextMenuTabId);
         break;
-      // Other actions will be implemented later
+      case 'close-others':
+        this.closeOtherTabs(this.contextMenuTabId);
+        break;
+      case 'close-right':
+        this.closeTabsToRight(this.contextMenuTabId);
+        break;
     }
   }
 
@@ -1326,6 +1476,147 @@ class ForgeBrowser {
     referenceTab.element.insertAdjacentElement('afterend', newTab.element);
     
     this.updateStatus('New tab created');
+  }
+
+  reloadTab(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (tab && tab.webview) {
+      tab.webview.reload();
+      this.updateStatus('Reloading...');
+    }
+  }
+
+  duplicateTab(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+    
+    const tabIndex = this.tabs.indexOf(tab);
+    let url = null;
+    
+    // Get current URL from webview
+    if (tab.webview) {
+      try {
+        url = tab.webview.getURL();
+      } catch (e) {
+        url = null;
+      }
+    }
+    
+    // Create new tab with the same URL
+    const newTabId = this.createTab(url);
+    
+    // Find the newly created tab
+    const newTab = this.tabs.find(t => t.id === newTabId);
+    if (!newTab) return;
+    
+    // Remove from current position (end)
+    const currentIndex = this.tabs.indexOf(newTab);
+    this.tabs.splice(currentIndex, 1);
+    
+    // Insert after the duplicated tab
+    this.tabs.splice(tabIndex + 1, 0, newTab);
+    
+    // Reorder DOM elements
+    tab.element.insertAdjacentElement('afterend', newTab.element);
+    
+    this.updateStatus('Tab duplicated');
+  }
+
+  toggleTabMute(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab || !tab.webview) return;
+    
+    // Toggle mute state
+    const isMuted = tab.webview.isAudioMuted();
+    tab.webview.setAudioMuted(!isMuted);
+    tab.isMuted = !isMuted;
+    
+    // Update the audio icon in the tab
+    this.updateTabAudioIcon(tabId);
+    
+    this.updateStatus(tab.isMuted ? 'Tab muted' : 'Tab unmuted');
+  }
+
+  updateTabAudioIcon(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+    
+    // Find or create the audio icon element
+    let audioIcon = tab.element.querySelector('.tab-audio-icon');
+    
+    if (tab.isMuted) {
+      // Show mute icon (red)
+      if (!audioIcon) {
+        audioIcon = document.createElement('img');
+        audioIcon.className = 'tab-audio-icon';
+        audioIcon.width = 14;
+        audioIcon.height = 14;
+        // Insert before close button
+        const closeBtn = tab.element.querySelector('.tab-close');
+        if (closeBtn) {
+          closeBtn.insertAdjacentElement('beforebegin', audioIcon);
+        }
+      }
+      audioIcon.src = 'forge-asset://ui-icons/volume-mute.svg';
+      audioIcon.title = 'Tab is muted - click to unmute';
+      audioIcon.className = 'tab-audio-icon muted';
+    } else if (tab.isPlayingAudio) {
+      // Show playing audio icon (orange accent)
+      if (!audioIcon) {
+        audioIcon = document.createElement('img');
+        audioIcon.className = 'tab-audio-icon';
+        audioIcon.width = 14;
+        audioIcon.height = 14;
+        const closeBtn = tab.element.querySelector('.tab-close');
+        if (closeBtn) {
+          closeBtn.insertAdjacentElement('beforebegin', audioIcon);
+        }
+      }
+      audioIcon.src = 'forge-asset://ui-icons/volume-loud.svg';
+      audioIcon.title = 'Tab is playing audio - click to mute';
+      audioIcon.className = 'tab-audio-icon playing';
+    } else {
+      // Remove audio icon if not muted and not playing
+      if (audioIcon) {
+        audioIcon.remove();
+      }
+    }
+    
+    // Make audio icon clickable to toggle mute
+    if (audioIcon && !audioIcon.hasAttribute('data-click-bound')) {
+      audioIcon.setAttribute('data-click-bound', 'true');
+      audioIcon.style.cursor = 'pointer';
+      audioIcon.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleTabMute(tabId);
+      });
+    }
+  }
+
+  closeOtherTabs(tabId) {
+    // Get list of tabs to close (all except the specified tab)
+    const tabsToClose = this.tabs.filter(t => t.id !== tabId).map(t => t.id);
+    
+    // Close them one by one
+    tabsToClose.forEach(id => this.closeTab(id));
+    
+    // Switch to the remaining tab
+    this.switchTab(tabId);
+    
+    this.updateStatus('Other tabs closed');
+  }
+
+  closeTabsToRight(tabId) {
+    const tabIndex = this.tabs.findIndex(t => t.id === tabId);
+    if (tabIndex === -1) return;
+    
+    // Get tabs to the right
+    const tabsToClose = this.tabs.slice(tabIndex + 1).map(t => t.id);
+    
+    // Close them
+    tabsToClose.forEach(id => this.closeTab(id));
+    
+    this.updateStatus('Tabs to the right closed');
   }
 
   async moveTabToNewWindow(tabId) {
@@ -1363,13 +1654,11 @@ class ForgeBrowser {
     
     // Webview event handlers
     webview.addEventListener('did-start-loading', () => {
-      console.log('[Webview] did-start-loading (createWebviewForTab)');
       try { self.updateStatus('Loading...'); } catch(e) {}
       try { self.updateTabLoading(tab.id, true); } catch(e) {}
     });
     
     webview.addEventListener('did-stop-loading', () => {
-      console.log('[Webview] did-stop-loading (createWebviewForTab)');
       try { self.updateStatus('Ready'); } catch(e) {}
       try { self.updateTabLoading(tab.id, false); } catch(e) {}
     });
@@ -1385,10 +1674,14 @@ class ForgeBrowser {
     });
     
     webview.addEventListener('did-navigate', (e) => {
-      console.log('[Webview] did-navigate (createWebviewForTab):', e.url);
       if (tab.id === self.activeTabId) {
         self.urlInput.value = e.url;
         if (self.updateSecurityIndicator) self.updateSecurityIndicator(e.url);
+      }
+      // Reset ad counter for this tab on navigation
+      tab.adsBlocked = 0;
+      if (tab.id === self.activeTabId) {
+        self.updateAdCounter(0);
       }
       // Add to browsing history (exclude home and internal pages)
       if (!e.url.startsWith('forge://') && !e.url.startsWith('about:')) {
@@ -1407,7 +1700,6 @@ class ForgeBrowser {
     webview.addEventListener('dom-ready', () => {
       try {
         const currentUrl = webview.getURL();
-        console.log('[Webview] dom-ready (createWebviewForTab):', currentUrl);
         if (currentUrl) {
           if (self.injectAdBlockScript) self.injectAdBlockScript(webview, currentUrl);
           if (self.injectCosmeticCSS) self.injectCosmeticCSS(webview, currentUrl);
@@ -1443,6 +1735,55 @@ class ForgeBrowser {
       self.showWebviewContextMenu(e, webview);
     });
     
+    // Close all popups when webview gets focus (user clicks on it)
+    webview.addEventListener('focus', () => {
+      self.closeAllPopups();
+    });
+    
+    // Listen for ad-blocked messages from injected script
+    webview.addEventListener('console-message', (e) => {
+      if (e.message && e.message.startsWith('[FORGE_AD_BLOCKED]')) {
+        const count = parseInt(e.message.split(' ')[1], 10);
+        if (!isNaN(count)) {
+          tab.adsBlocked = count;
+          if (tab.id === self.activeTabId) {
+            self.updateAdCounter(count);
+          }
+        }
+      }
+    });
+    
+    // Audio playing detection - use IPC to check audio state from main process
+    const checkAudioState = async () => {
+      const tabObj = self.tabs.find(t => t.id === tab.id);
+      if (!tabObj || !tabObj.webview) return;
+      
+      try {
+        const webContentsId = webview.getWebContentsId ? webview.getWebContentsId() : null;
+        if (webContentsId) {
+          const isCurrentlyAudible = await window.forgeAPI.isWebContentsAudible(webContentsId);
+          const wasPlaying = tabObj.isPlayingAudio;
+          
+          if (isCurrentlyAudible !== wasPlaying) {
+            tabObj.isPlayingAudio = isCurrentlyAudible;
+            self.updateTabAudioIcon(tab.id);
+          }
+        }
+      } catch (e) {
+        // Webview might not be ready yet
+      }
+    };
+    
+    // Start audio checking after webview is ready  
+    webview.addEventListener('dom-ready', () => {
+      const audioCheckInterval = setInterval(checkAudioState, 500);
+      const tabObj = self.tabs.find(t => t.id === tab.id);
+      if (tabObj) {
+        tabObj.audioCheckInterval = audioCheckInterval;
+      }
+      checkAudioState();
+    }, { once: true });
+
     this.browserContent.appendChild(webview);
     tab.webview = webview;
     
@@ -1603,6 +1944,20 @@ class ForgeBrowser {
     const tab = this.tabs.find(t => t.id === this.activeTabId);
     if (tab && tab.webview) {
       tab.webview.openDevTools();
+    }
+  }
+
+  /**
+   * View page source - opens the native view-source viewer
+   * @param {HTMLWebViewElement} webview - The webview to get source from
+   */
+  viewPageSource(webview) {
+    try {
+      const url = webview.getURL();
+      // Use the native view-source protocol
+      this.createTab('view-source:' + url);
+    } catch (e) {
+      console.error('[ViewSource] Failed to view page source:', e);
     }
   }
 
@@ -2071,8 +2426,8 @@ class ForgeBrowser {
       console.error('Failed to get app info:', e);
     }
     
-    this.updateStatus.textContent = '';
-    this.updateStatus.className = 'about-update-status';
+    this.updateStatusElement.textContent = '';
+    this.updateStatusElement.className = 'about-update-status';
     this.aboutPanel.classList.remove('hidden');
   }
   
@@ -2092,37 +2447,37 @@ class ForgeBrowser {
     
     switch (status) {
       case 'checking-for-update':
-        this.updateStatus.textContent = 'Checking for updates...';
-        this.updateStatus.className = 'about-update-status checking';
+        this.updateStatusElement.textContent = 'Checking for updates...';
+        this.updateStatusElement.className = 'about-update-status checking';
         break;
         
       case 'update-available':
-        this.updateStatus.innerHTML = `
+        this.updateStatusElement.innerHTML = `
           <span>Version ${version} is available!</span>
           <button id="download-update-btn" class="about-update-download-btn">Download Update</button>
         `;
-        this.updateStatus.className = 'about-update-status available';
+        this.updateStatusElement.className = 'about-update-status available';
         document.getElementById('download-update-btn')?.addEventListener('click', async () => {
           await window.forgeAPI.updates.downloadUpdate();
         });
         break;
         
       case 'update-not-available':
-        this.updateStatus.textContent = 'You are running the latest version.';
-        this.updateStatus.className = 'about-update-status success';
+        this.updateStatusElement.textContent = 'You are running the latest version.';
+        this.updateStatusElement.className = 'about-update-status success';
         break;
         
       case 'download-progress':
-        this.updateStatus.textContent = `Downloading update: ${percent.toFixed(1)}%`;
-        this.updateStatus.className = 'about-update-status downloading';
+        this.updateStatusElement.textContent = `Downloading update: ${percent.toFixed(1)}%`;
+        this.updateStatusElement.className = 'about-update-status downloading';
         break;
         
       case 'update-downloaded':
-        this.updateStatus.innerHTML = `
+        this.updateStatusElement.innerHTML = `
           <span>Update ${version} ready to install!</span>
           <button id="install-update-btn" class="about-update-install-btn">Restart & Install</button>
         `;
-        this.updateStatus.className = 'about-update-status ready';
+        this.updateStatusElement.className = 'about-update-status ready';
         document.getElementById('install-update-btn')?.addEventListener('click', () => {
           window.forgeAPI.updates.installUpdate();
         });
@@ -2136,11 +2491,11 @@ class ForgeBrowser {
   
   showUpdateError(errorMessage) {
     this.lastUpdateError = errorMessage;
-    this.updateStatus.innerHTML = `
+    this.updateStatusElement.innerHTML = `
       <span>Update check failed</span>
       <button id="copy-error-btn" class="about-update-copy-btn">Copy Error</button>
     `;
-    this.updateStatus.className = 'about-update-status error';
+    this.updateStatusElement.className = 'about-update-status error';
     document.getElementById('copy-error-btn')?.addEventListener('click', () => {
       this.copyUpdateErrorToClipboard();
     });
@@ -2847,7 +3202,6 @@ class ForgeBrowser {
   async injectAdBlockScript(webview, url) {
     // Only inject if ad blocker is enabled
     if (!this.adblockEnabled) {
-      console.log('[Script] Adblock disabled, skipping injection');
       return;
     }
     
@@ -2857,30 +3211,20 @@ class ForgeBrowser {
     }
     
     try {
-      console.log('[Script] Attempting injection for URL:', url);
-      
       // Get script for this URL from main process
       const result = await window.forgeAPI.scriptInjector.getScript(url);
-      console.log('[Script] IPC result:', result ? 'received' : 'null', 'hasScript:', result?.hasScript);
       
       if (result && result.hasScript && result.script) {
-        console.log('[Script] Got script, length:', result.script.length);
-        
-        // Inject the script - wrap it to ensure it runs and logs
+        // Inject the script
         const wrappedScript = `
           try {
-            console.log('[Forge] Script injection starting...');
             ${result.script}
-            console.log('[Forge] Script injection complete');
           } catch (e) {
             console.error('[Forge] Script injection error:', e);
           }
         `;
         
         await webview.executeJavaScript(wrappedScript, true);
-        console.log('[Script] executeJavaScript completed for', new URL(url).hostname);
-      } else {
-        console.log('[Script] No script for this URL');
       }
     } catch (e) {
       console.error('[Script] Failed to inject script:', e.message);
@@ -2890,7 +3234,6 @@ class ForgeBrowser {
   // URL Autocomplete Methods
   handleUrlInputChange() {
     const query = this.lastUserInput.trim() || this.urlInput.value.trim();
-    console.log('[Autocomplete] Input changed:', query);
     
     if (query.length === 0) {
       this.hideSuggestions();
@@ -2905,15 +3248,12 @@ class ForgeBrowser {
   }
   
   async fetchSuggestions(query) {
-    console.log('[Autocomplete] Fetching suggestions for:', query);
     try {
       // Get history-based suggestions first (these are prioritized)
       const historySuggestions = this.getHistorySuggestions(query);
-      console.log('[Autocomplete] History suggestions:', historySuggestions);
       
       // Use IPC to fetch from main process (avoids CSP issues)
       const googleSuggestions = await window.forgeAPI.getUrlSuggestions(query);
-      console.log('[Autocomplete] Google suggestions received:', googleSuggestions);
       
       // Merge: history first, then Google (without duplicates)
       const historyDomains = new Set(historySuggestions.map(s => s.toLowerCase()));

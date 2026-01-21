@@ -96,4 +96,13 @@ contextBridge.exposeInMainWorld('forgeAPI', {
     setEnabled: (enabled) => ipcRenderer.invoke('script-set-enabled', enabled),
     getScript: (url) => ipcRenderer.invoke('script-get-for-url', url)
   },
+  
+  // Tab audio state
+  isWebContentsAudible: (webContentsId) => ipcRenderer.invoke('is-webcontents-audible', webContentsId),
+  
+  // DevTools
+  devTools: {
+    open: (targetWebContentsId, devtoolsWebContentsId) => ipcRenderer.invoke('devtools-open', targetWebContentsId, devtoolsWebContentsId),
+    close: (targetWebContentsId) => ipcRenderer.invoke('devtools-close', targetWebContentsId),
+  },
 });

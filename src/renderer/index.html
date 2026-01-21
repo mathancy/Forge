@@ -63,6 +63,10 @@
           </svg>
         </div>
         <input type="text" id="url-input" placeholder="Search or enter URL" autocomplete="off" spellcheck="false">
+        <div id="ad-counter" class="ad-counter hidden" title="Ads blocked on this page">
+          <img src="forge-asset://ui-icons/shield.svg" alt="" width="12" height="12">
+          <span id="ad-counter-value">0</span>
+        </div>
         <div id="url-suggestions" class="url-suggestions hidden"></div>
       </div>
       <div class="nav-actions">
@@ -124,12 +128,12 @@
 
     <!-- Webview Context Menu -->
     <div id="webview-context-menu" class="context-menu hidden">
-      <div class="context-menu-item" data-action="back">
-        <img class="menu-icon" src="../../assets/ui-icons/arrow-left.svg" width="16" height="16" alt="">
+      <div class="context-menu-item" data-action="back" id="ctx-back">
+        <img class="menu-icon" src="../../assets/ui-icons/back.svg" width="16" height="16" alt="">
         Back
       </div>
-      <div class="context-menu-item" data-action="forward">
-        <img class="menu-icon" src="../../assets/ui-icons/arrow-right.svg" width="16" height="16" alt="">
+      <div class="context-menu-item" data-action="forward" id="ctx-forward">
+        <img class="menu-icon" src="../../assets/ui-icons/forward.svg" width="16" height="16" alt="">
         Forward
       </div>
       <div class="context-menu-item" data-action="reload">
@@ -162,6 +166,9 @@
         Inspect Element
       </div>
     </div>
+
+    <!-- Context Menu Overlay (for capturing clicks outside context menus) -->
+    <div id="context-menu-overlay" class="context-menu-overlay hidden"></div>
 
     <!-- Main Menu Dropdown -->
     <div id="main-menu" class="context-menu hidden">

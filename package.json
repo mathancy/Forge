@@ -1,6 +1,6 @@
 {
   "name": "forge-browser",
-  "version": "0.1.23-alpha",
+  "version": "0.1.24-alpha",
   "description": "Forge - A lightweight custom browser by Forgeworks Interactive Limited",
   "main": "src/main/main.js",
   "scripts": {
@@ -26,12 +26,14 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.2",
     "electron": "^40.0.0",
-    "electron-builder": "^24.9.1"
+    "electron-builder": "^24.9.1",
+    "rcedit": "^5.0.2"
   },
   "build": {
-    "appId": "com.forgeworks.forge",
+    "appId": "com.forgeworks.forge.browser",
     "productName": "Forge",
     "copyright": "Copyright © 2026 Forgeworks Interactive Limited",
+    "afterPack": "./build/afterPack.js",
     "directories": {
       "output": "dist"
     },
