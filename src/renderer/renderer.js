@@ -136,6 +136,26 @@ class ForgeBrowser {
     // AI state
     this.currentAIProvider = null;
     this.aiWebview = null;
+    
+    // Favorites elements
+    this.btnFavorites = document.getElementById('btn-favorites');
+    this.favoritesToggle = document.getElementById('favorites-toggle');
+    this.favoritesPanel = document.getElementById('favorites-panel');
+    this.favoritesSlots = document.getElementById('favorites-slots');
+    this.favoritesEditDialog = document.getElementById('favorites-edit-dialog');
+    this.favoritesDialogTitle = document.getElementById('favorites-dialog-title');
+    this.favoriteUrlInput = document.getElementById('favorite-url-input');
+    this.btnCloseFavoritesDialog = document.getElementById('btn-close-favorites-dialog');
+    this.btnCancelFavorite = document.getElementById('btn-cancel-favorite');
+    this.btnSaveFavorite = document.getElementById('btn-save-favorite');
+    
+    // Favorites state
+    this.favoritesEnabled = false;
+    this.favorites = [];
+    this.editingFavoriteSlot = null;
+    
+    // Hide favorites button until settings load
+    this.btnFavorites.style.display = 'none';
   }
 
   bindEvents() {
@@ -259,6 +279,18 @@ class ForgeBrowser {
     // AI Assistant events
     this.btnCloseAISettings.addEventListener('click', () => this.hideAISettingsPanel());
     this.btnAIWebviewClose.addEventListener('click', () => this.hideAIWebviewPanel());
+    
+    // Favorites events
+    this.btnFavorites.addEventListener('click', () => this.toggleFavoritesPanel());
+    this.btnCloseFavoritesDialog.addEventListener('click', () => this.hideFavoritesDialog());
+    this.btnCancelFavorite.addEventListener('click', () => this.hideFavoritesDialog());
+    this.btnSaveFavorite.addEventListener('click', () => this.saveFavorite());
+    this.favoriteUrlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.saveFavorite();
+    });
+    
+    // Initialize Favorites
+    this.initFavorites();
     
     // Initialize Google auth status
     this.updateGoogleAuthStatus();
@@ -1297,6 +1329,9 @@ class ForgeBrowser {
       case 'ai-assistant':
         this.showAISettingsPanel();
         break;
+      case 'favorites':
+        this.toggleFavoritesEnabled();
+        return; // Don't hide menu for toggle
       case 'about':
         this.showAboutPanel();
         break;
@@ -2261,6 +2296,186 @@ class ForgeBrowser {
       this.browsingHistory = [];
       this.saveBrowsingHistory();
       this.renderHistoryList();
+    }
+  }
+
+  // ==================== Favorites Methods ====================
+  
+  async initFavorites() {
+    try {
+      const data = await window.forgeAPI.favorites.get();
+      this.favoritesEnabled = data.enabled;
+      this.favorites = data.favorites;
+      this.updateFavoritesUI();
+    } catch (e) {
+      console.error('Failed to initialize favorites:', e);
+    }
+  }
+  
+  updateFavoritesUI() {
+    // Update toggle in menu
+    if (this.favoritesEnabled) {
+      this.favoritesToggle.classList.add('active');
+      this.btnFavorites.style.display = '';
+    } else {
+      this.favoritesToggle.classList.remove('active');
+      this.btnFavorites.style.display = 'none';
+      this.hideFavoritesPanel();
+    }
+  }
+  
+  async toggleFavoritesEnabled() {
+    try {
+      this.favoritesEnabled = !this.favoritesEnabled;
+      await window.forgeAPI.favorites.setEnabled(this.favoritesEnabled);
+      this.updateFavoritesUI();
+    } catch (e) {
+      console.error('Failed to toggle favorites:', e);
+    }
+  }
+  
+  toggleFavoritesPanel() {
+    if (this.favoritesPanel.classList.contains('hidden')) {
+      this.showFavoritesPanel();
+    } else {
+      this.hideFavoritesPanel();
+    }
+  }
+  
+  showFavoritesPanel() {
+    this.favoritesPanel.classList.remove('hidden');
+    this.renderFavoritesSlots();
+  }
+  
+  hideFavoritesPanel() {
+    this.favoritesPanel.classList.add('hidden');
+  }
+  
+  resizeFavoriteSlots() {
+    // Calculate slot size to make them square based on available height
+    const viewportHeight = window.innerHeight;
+    const topOffset = 82; // titlebar + navbar
+    const bottomOffset = 24; // statusbar
+    const availableHeight = viewportHeight - topOffset - bottomOffset;
+    const slotSize = Math.floor(availableHeight * 0.06); // ~6% of content area height
+    
+    // Apply size to all slots
+    const slots = this.favoritesSlots.querySelectorAll('.favorite-slot');
+    slots.forEach(slot => {
+      slot.style.width = slotSize + 'px';
+      slot.style.height = slotSize + 'px';
+      slot.style.flexShrink = '0';
+    });
+  }
+  
+  renderFavoritesSlots() {
+    this.favoritesSlots.innerHTML = '';
+    
+    for (let i = 0; i < 5; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'favorite-slot' + (this.favorites[i] ? '' : ' empty');
+      slot.dataset.slot = i;
+      
+      if (this.favorites[i]) {
+        const fav = this.favorites[i];
+        slot.innerHTML = `
+          <img class="favorite-bg" src="${this.escapeHtml(fav.favicon)}" alt="" onerror="this.src='forge-asset://ui-icons/globe.svg'">
+          <div class="favorite-actions">
+            <button class="favorite-action-btn edit" title="Edit" data-slot="${i}">
+              <img src="../../assets/ui-icons/customize.svg" width="20" height="20" alt="Edit">
+            </button>
+            <button class="favorite-action-btn delete" title="Remove" data-slot="${i}">
+              <img src="../../assets/ui-icons/delete.svg" width="20" height="20" alt="Delete">
+            </button>
+          </div>
+        `;
+        
+        // Click to navigate
+        slot.addEventListener('click', (e) => {
+          if (!e.target.closest('.favorite-action-btn')) {
+            this.createTab(fav.url);
+            this.hideFavoritesPanel();
+          }
+        });
+        
+        // Edit button
+        slot.querySelector('.favorite-action-btn.edit').addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.showFavoritesDialog(i, fav);
+        });
+        
+        // Delete button
+        slot.querySelector('.favorite-action-btn.delete').addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.removeFavorite(i);
+        });
+      } else {
+        slot.innerHTML = `
+          <div class="favorite-slot-add">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+        `;
+        
+        slot.addEventListener('click', () => {
+          this.showFavoritesDialog(i, null);
+        });
+      }
+      
+      this.favoritesSlots.appendChild(slot);
+    }
+    
+    // Resize slots after DOM update
+    requestAnimationFrame(() => this.resizeFavoriteSlots());
+  }
+  
+  showFavoritesDialog(slotIndex, existingFavorite) {
+    this.editingFavoriteSlot = slotIndex;
+    this.favoritesDialogTitle.textContent = existingFavorite ? 'Edit Favorite' : 'Add Favorite';
+    this.favoriteUrlInput.value = existingFavorite ? existingFavorite.url : '';
+    this.favoritesEditDialog.classList.remove('hidden');
+    this.favoriteUrlInput.focus();
+  }
+  
+  hideFavoritesDialog() {
+    this.favoritesEditDialog.classList.add('hidden');
+    this.editingFavoriteSlot = null;
+    this.favoriteUrlInput.value = '';
+  }
+  
+  async saveFavorite() {
+    const url = this.favoriteUrlInput.value.trim();
+    
+    if (!url) {
+      this.favoriteUrlInput.focus();
+      return;
+    }
+    
+    try {
+      const result = await window.forgeAPI.favorites.set(this.editingFavoriteSlot, url, null);
+      if (result.success) {
+        this.favorites[this.editingFavoriteSlot] = result.favorite;
+        this.hideFavoritesDialog();
+        this.renderFavoritesSlots();
+      } else {
+        alert(result.error || 'Failed to save favorite');
+      }
+    } catch (e) {
+      console.error('Failed to save favorite:', e);
+      alert('Failed to save favorite');
+    }
+  }
+  
+  async removeFavorite(slotIndex) {
+    try {
+      const result = await window.forgeAPI.favorites.remove(slotIndex);
+      if (result.success) {
+        this.favorites[slotIndex] = null;
+        this.renderFavoritesSlots();
+      }
+    } catch (e) {
+      console.error('Failed to remove favorite:', e);
     }
   }
 }

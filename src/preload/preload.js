@@ -51,6 +51,14 @@ contextBridge.exposeInMainWorld('forgeAPI', {
     toggleProvider: (providerId, enabled) => ipcRenderer.invoke('ai-toggle-provider', providerId, enabled)
   },
   
+  // Favorites
+  favorites: {
+    get: () => ipcRenderer.invoke('favorites-get'),
+    setEnabled: (enabled) => ipcRenderer.invoke('favorites-set-enabled', enabled),
+    set: (slotIndex, url, name) => ipcRenderer.invoke('favorites-set', slotIndex, url, name),
+    remove: (slotIndex) => ipcRenderer.invoke('favorites-remove', slotIndex)
+  },
+  
   // Auto-updater
   updates: {
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

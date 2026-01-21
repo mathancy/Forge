@@ -5,9 +5,13 @@ const GoogleAuth = require('./google-auth');
 const ChromeImporter = require('./chrome-importer');
 const AIService = require('./ai-service');
 const autoUpdaterService = require('./auto-updater');
+const FavoritesService = require('./favorites-service');
 
 // Initialize Chrome Importer
 const chromeImporter = new ChromeImporter();
+
+// Initialize Favorites Service
+const favoritesService = new FavoritesService();
 
 // AI Service will be initialized after app is ready
 let aiService = null;
@@ -294,8 +298,26 @@ ipcMain.handle('ai-toggle-provider', (event, providerId, enabled) => {
   return aiService ? aiService.toggleProvider(providerId, enabled) : { success: false, error: 'AI service not ready' };
 });
 
+// Favorites IPC handlers
+ipcMain.handle('favorites-get', () => {
+  return favoritesService.getFavorites();
+});
+
+ipcMain.handle('favorites-set-enabled', (event, enabled) => {
+  return favoritesService.setEnabled(enabled);
+});
+
+ipcMain.handle('favorites-set', (event, slotIndex, url, name) => {
+  return favoritesService.setFavorite(slotIndex, url, name);
+});
+
+ipcMain.handle('favorites-remove', (event, slotIndex) => {
+  return favoritesService.removeFavorite(slotIndex);
+});
+
 // Load credentials on startup
 app.whenReady().then(() => {
   loadGoogleCredentials();
   aiService = new AIService(app);
+  favoritesService.initialize();
 });

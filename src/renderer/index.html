@@ -65,6 +65,9 @@
         <input type="text" id="url-input" placeholder="Search or enter URL" autocomplete="off" spellcheck="false">
       </div>
       <div class="nav-actions">
+        <button id="btn-favorites" class="nav-btn favorites-btn" title="Favorites">
+          <img class="nav-icon" src="forge-asset://ui-icons/heart.svg" alt="Favorites">
+        </button>
         <div id="ai-buttons" class="ai-buttons">
           <!-- AI agent buttons will be dynamically added here -->
         </div>
@@ -121,50 +124,35 @@
     <!-- Main Menu Dropdown -->
     <div id="main-menu" class="context-menu hidden">
       <div class="context-menu-item" data-action="google-account" id="menu-google-account">
-        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="5.5" r="3" stroke="currentColor" stroke-width="1.2"/>
-          <path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
+        <img class="menu-icon" src="../../assets/ui-icons/profile.svg" width="16" height="16" alt="">
         <span id="google-account-text">Sign in with Google</span>
       </div>
       <div class="context-menu-separator"></div>
       <div class="context-menu-item" data-action="history">
-        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2"/>
-          <path d="M8 4.5V8L10.5 10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
+        <img class="menu-icon" src="../../assets/ui-icons/history.svg" width="16" height="16" alt="">
         History
       </div>
+      <div class="context-menu-item has-toggle" data-action="favorites">
+        <img class="menu-icon" src="../../assets/ui-icons/heart.svg" width="16" height="16" alt="">
+        Favorites
+        <span class="menu-toggle" id="favorites-toggle"></span>
+      </div>
       <div class="context-menu-item" data-action="import-chrome">
-        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.2"/>
-          <circle cx="8" cy="8" r="2.5" fill="currentColor"/>
-          <path d="M8 1v4.5M15 8h-4.5M8 15v-4.5M1 8h4.5" stroke="currentColor" stroke-width="1.2"/>
-        </svg>
+        <img class="menu-icon" src="../../assets/ui-icons/import.svg" width="16" height="16" alt="">
         Import from Chrome
       </div>
       <div class="context-menu-item" data-action="ai-assistant">
-        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-          <circle cx="8" cy="8" r="4" stroke="currentColor" stroke-width="1.2"/>
-          <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
-        </svg>
+        <img class="menu-icon" src="../../assets/ui-icons/ai.svg" width="16" height="16" alt="">
         AI Assistant
       </div>
       <div class="context-menu-separator"></div>
       <div class="context-menu-item" data-action="devtools">
-        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <img class="menu-icon" src="../../assets/ui-icons/developer.svg" width="16" height="16" alt="">
         Developer Tools
       </div>
       <div class="context-menu-separator"></div>
       <div class="context-menu-item" data-action="about">
-        <svg class="menu-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.2"/>
-          <path d="M8 7v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          <circle cx="8" cy="4.5" r="1" fill="currentColor"/>
-        </svg>
+        <img class="menu-icon" src="../../assets/ui-icons/about.svg" width="16" height="16" alt="">
         About Forge
       </div>
     </div>
@@ -282,6 +270,35 @@
       </div>
       <div id="ai-webview-container" class="ai-webview-container">
         <!-- Webview will be dynamically inserted here -->
+      </div>
+    </div>
+
+    <!-- Favorites Panel (right side) -->
+    <div id="favorites-panel" class="favorites-panel hidden">
+      <div id="favorites-slots" class="favorites-slots">
+        <!-- 5 favorite slots will be dynamically added here -->
+      </div>
+    </div>
+
+    <!-- Favorites Edit Dialog -->
+    <div id="favorites-edit-dialog" class="dialog-overlay hidden">
+      <div class="dialog">
+        <div class="dialog-header">
+          <h3 id="favorites-dialog-title">Add Favorite</h3>
+          <button id="btn-close-favorites-dialog" class="dialog-close-btn">
+            <svg width="14" height="14" viewBox="0 0 14 14">
+              <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+          </button>
+        </div>
+        <div class="dialog-content">
+          <label for="favorite-url-input">Website URL</label>
+          <input type="text" id="favorite-url-input" placeholder="https://example.com">
+        </div>
+        <div class="dialog-actions">
+          <button id="btn-cancel-favorite" class="dialog-btn secondary">Cancel</button>
+          <button id="btn-save-favorite" class="dialog-btn primary">Save</button>
+        </div>
       </div>
     </div>
   </div>

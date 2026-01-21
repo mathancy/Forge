@@ -694,12 +694,12 @@ webview.active {
 .context-menu-item .menu-icon {
   margin-right: 10px;
   vertical-align: middle;
-  color: var(--text-secondary);
-  transition: color 0.15s;
+  filter: brightness(0) saturate(100%) invert(97%) sepia(6%) saturate(671%) hue-rotate(333deg) brightness(103%) contrast(92%);
+  transition: filter 0.15s;
 }
 
 .context-menu-item:hover .menu-icon {
-  color: var(--accent);
+  filter: brightness(0) saturate(100%) invert(78%) sepia(53%) saturate(1057%) hue-rotate(344deg) brightness(103%) contrast(97%);
 }
 
 /* History Panel */
@@ -1679,4 +1679,348 @@ body.ai-panel-open #statusbar {
 /* AI webview header icon */
 .ai-webview-icon img {
   filter: brightness(0) invert(1);
+}
+
+/* ==================== Favorites ==================== */
+
+/* Menu toggle switch */
+.context-menu-item.has-toggle {
+  position: relative;
+  padding-right: 56px; /* Make room for the toggle */
+}
+
+.context-menu-item.has-toggle .menu-item-text {
+  flex: 1;
+}
+
+.context-menu-item.has-toggle .menu-icon {
+  vertical-align: middle;
+}
+
+.menu-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 20px;
+  background: var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.menu-toggle::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s ease;
+}
+
+.menu-toggle.active {
+  background: var(--accent);
+}
+
+.menu-toggle.active::after {
+  transform: translateX(16px);
+}
+
+/* Favorites button in navbar */
+.favorites-btn {
+  margin-right: 4px;
+}
+
+.favorites-btn .nav-icon {
+  width: 18px;
+  height: 18px;
+  filter: brightness(0) saturate(100%) invert(97%) sepia(6%) saturate(671%) hue-rotate(333deg) brightness(103%) contrast(92%);
+}
+
+.favorites-btn:hover .nav-icon {
+  filter: brightness(0) saturate(100%) invert(78%) sepia(53%) saturate(1057%) hue-rotate(344deg) brightness(103%) contrast(97%);
+}
+
+/* Favorites Panel */
+.favorites-panel {
+  position: fixed;
+  top: 82px; /* Below titlebar (38px) + navbar (44px) */
+  right: -500px; /* Start off-screen */
+  height: auto;
+  width: auto;
+  background: transparent;
+  display: flex;
+  flex-direction: row;
+  z-index: 99;
+  transition: right 0.3s ease;
+  pointer-events: none;
+  padding: 8px;
+}
+
+.favorites-panel:not(.hidden) {
+  right: 0;
+  pointer-events: auto;
+}
+
+.favorites-panel.hidden {
+  right: -500px;
+}
+
+/* Favorites panel overlays content, no shift needed */
+
+.favorites-slots {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+/* Favorite Slot */
+.favorite-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: visible;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.favorite-slot-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.favorite-slot:hover {
+  border-color: var(--accent);
+  transform: scale(1.02);
+}
+
+.favorite-slot.empty {
+  border-style: dashed;
+}
+
+.favorite-slot.empty:hover {
+  background: var(--hover);
+  transform: none;
+}
+
+.favorite-slot-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.favorite-slot-add svg {
+  width: 32px;
+  height: 32px;
+  opacity: 0.5;
+}
+
+/* Filled slot - favicon as background */
+.favorite-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.9;
+}
+
+.favorite-actions {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 10;
+  padding-top: 8px;
+  pointer-events: none;
+}
+
+.favorite-actions::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -10px;
+  right: -10px;
+  height: 8px;
+}
+
+.favorite-slot:hover .favorite-actions,
+.favorite-actions:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.favorite-action-btn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.favorite-action-btn img {
+  width: 14px !important;
+  height: 14px !important;
+  filter: brightness(0) invert(0.9);
+}
+
+.favorite-action-btn:hover {
+  background: var(--hover);
+  border-color: var(--accent);
+  transform: scale(1.1);
+}
+
+.favorite-action-btn.delete:hover img {
+  filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(1352%) hue-rotate(331deg) brightness(99%) contrast(97%);
+}
+
+/* Favorites Edit Dialog */
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog-overlay.hidden {
+  display: none;
+}
+
+.dialog {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dialog-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.dialog-close-btn:hover {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+
+.dialog-content {
+  padding: 20px;
+}
+
+.dialog-content label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.dialog-content input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.dialog-content input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.dialog-content input:last-of-type {
+  margin-bottom: 0;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.dialog-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dialog-btn.secondary {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.dialog-btn.secondary:hover {
+  background: var(--hover);
+}
+
+.dialog-btn.primary {
+  background: var(--accent);
+  border: none;
+  color: var(--bg-primary);
+}
+
+.dialog-btn.primary:hover {
+  background: var(--accent-hover);
 }
