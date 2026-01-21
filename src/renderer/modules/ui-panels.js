@@ -124,23 +124,53 @@ export const UIPanelsMixin = {
     if (!this.updateStatusElement) return;
     
     switch (data.status) {
-      case 'checking':
+      case 'checking-for-update':
         this.updateStatusElement.innerHTML = '<span class="update-checking">Checking for updates...</span>';
+        this.updateStatusElement.className = 'about-update-status checking';
         break;
-      case 'available':
-        this.updateStatusElement.innerHTML = `<span class="update-available">Update available: v${data.version}</span>`;
+      case 'update-available':
+        this.updateStatusElement.innerHTML = `
+          <span>Version ${data.version} is available!</span>
+          <button id="download-update-btn" class="about-update-download-btn">Download Update</button>
+        `;
+        this.updateStatusElement.className = 'about-update-status available';
+        document.getElementById('download-update-btn')?.addEventListener('click', async () => {
+          await window.forgeAPI.updates.downloadUpdate();
+        });
         break;
-      case 'not-available':
-        this.updateStatusElement.innerHTML = '<span class="update-current">You have the latest version</span>';
+      case 'update-not-available':
+        this.updateStatusElement.innerHTML = '<span class="update-current">You are running the latest version.</span>';
+        this.updateStatusElement.className = 'about-update-status success';
         break;
-      case 'downloading':
-        this.updateStatusElement.innerHTML = `<span class="update-downloading">Downloading... ${Math.round(data.percent || 0)}%</span>`;
+      case 'download-progress':
+        this.updateStatusElement.innerHTML = `<span class="update-downloading">Downloading update: ${(data.percent || 0).toFixed(1)}%</span>`;
+        this.updateStatusElement.className = 'about-update-status downloading';
         break;
-      case 'downloaded':
-        this.updateStatusElement.innerHTML = '<span class="update-ready">Update ready - restart to install</span>';
+      case 'update-downloaded':
+        this.updateStatusElement.innerHTML = `
+          <span>Update ${data.version} ready to install!</span>
+          <button id="install-update-btn" class="about-update-install-btn">Restart & Install</button>
+        `;
+        this.updateStatusElement.className = 'about-update-status ready';
+        document.getElementById('install-update-btn')?.addEventListener('click', () => {
+          window.forgeAPI.updates.installUpdate();
+        });
         break;
-      case 'error':
-        this.updateStatusElement.innerHTML = `<span class="update-error">Update error: ${data.error}</span>`;
+      case 'update-error':
+        this.updateStatusElement.innerHTML = `
+          <span>Update check failed</span>
+          <button id="copy-error-btn" class="about-update-copy-btn">Copy Error</button>
+        `;
+        this.updateStatusElement.className = 'about-update-status error';
+        this.lastUpdateError = data.error || 'Unknown error';
+        document.getElementById('copy-error-btn')?.addEventListener('click', async () => {
+          await navigator.clipboard.writeText(this.lastUpdateError);
+          const btn = document.getElementById('copy-error-btn');
+          if (btn) {
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = 'Copy Error'; }, 2000);
+          }
+        });
         break;
     }
   },

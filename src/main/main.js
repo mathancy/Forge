@@ -187,6 +187,15 @@ app.whenReady().then(() => {
         console.log('Auto-update check failed:', err.message);
       });
     }, 3000);
+  } else {
+    // In dev mode, register stub handlers to avoid IPC errors
+    ipcMain.handle('check-for-updates', () => {
+      console.log('[Dev] Update check skipped in dev mode');
+      return { success: false, error: 'Updates disabled in dev mode' };
+    });
+    ipcMain.handle('download-update', () => ({ success: false, error: 'Updates disabled in dev mode' }));
+    ipcMain.handle('install-update', () => ({ success: false, error: 'Updates disabled in dev mode' }));
+    ipcMain.handle('get-update-status', () => ({ updateAvailable: false, updateDownloaded: false }));
   }
 
   app.on('activate', () => {
