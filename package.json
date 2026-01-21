@@ -1,6 +1,6 @@
 {
   "name": "forge-browser",
-  "version": "0.1.2-alpha",
+  "version": "0.1.21-alpha",
   "description": "Forge - A lightweight custom browser by Forgeworks Interactive Limited",
   "main": "src/main/main.js",
   "scripts": {
@@ -62,8 +62,9 @@
       "signAndEditExecutable": false
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
       "installerIcon": "assets/forge-logo.ico",
       "uninstallerIcon": "assets/forge-logo.ico",
       "installerHeaderIcon": "assets/forge-logo.ico",
