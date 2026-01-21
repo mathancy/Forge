@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' forge-asset:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src * data: blob: 'self' forge-asset:; frame-src *; child-src *;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' forge-asset:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src * data: blob: 'self' forge-asset:; frame-src *; child-src *; connect-src 'self' https://suggestqueries.google.com;">
   <title>Forge</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -70,7 +70,7 @@
         <div id="url-suggestions" class="url-suggestions hidden"></div>
       </div>
       <div class="nav-actions">
-        <button id="btn-favorites" class="nav-btn favorites-btn" title="Favorites">
+        <button id="btn-favorites" class="nav-btn favorites-btn hidden" title="Favorites">
           <img class="nav-icon" src="forge-asset://ui-icons/heart.svg" alt="Favorites">
         </button>
         <div id="ai-buttons" class="ai-buttons">
@@ -172,14 +172,13 @@
 
     <!-- Main Menu Dropdown -->
     <div id="main-menu" class="context-menu hidden">
-      <div class="context-menu-item" data-action="google-account" id="menu-google-account">
-        <img class="menu-icon" src="../../assets/ui-icons/profile.svg" width="16" height="16" alt="">
-        <span id="google-account-text">Sign in with Google</span>
-      </div>
-      <div class="context-menu-separator"></div>
       <div class="context-menu-item" data-action="history">
         <img class="menu-icon" src="../../assets/ui-icons/history.svg" width="16" height="16" alt="">
         History
+      </div>
+      <div class="context-menu-item" data-action="password-anvil">
+        <img class="menu-icon" src="../../assets/ui-icons/shield.svg" width="16" height="16" alt="">
+        Password Anvil
       </div>
       <div class="context-menu-item has-toggle" data-action="favorites">
         <img class="menu-icon" src="../../assets/ui-icons/heart.svg" width="16" height="16" alt="">
@@ -189,12 +188,8 @@
       <div class="context-menu-item has-toggle" data-action="adblock">
         <img class="menu-icon" src="../../assets/ui-icons/shield.svg" width="16" height="16" alt="">
         Ad Blocker
-        <span class="menu-toggle enabled" id="adblock-toggle"></span>
         <span class="adblock-stats" id="adblock-stats"></span>
-      </div>
-      <div class="context-menu-item" data-action="import-chrome">
-        <img class="menu-icon" src="../../assets/ui-icons/import.svg" width="16" height="16" alt="">
-        Import from Chrome
+        <span class="menu-toggle" id="adblock-toggle"></span>
       </div>
       <div class="context-menu-item" data-action="ai-assistant">
         <img class="menu-icon" src="../../assets/ui-icons/ai.svg" width="16" height="16" alt="">
@@ -246,20 +241,60 @@
       </div>
     </div>
 
-    <!-- Google Account Panel -->
-    <div id="google-account-panel" class="panel hidden">
+    <!-- Password Anvil Panel -->
+    <div id="password-anvil-panel" class="panel hidden">
       <div class="panel-header">
-        <h2>Google Account</h2>
-        <button id="btn-close-google-panel" class="panel-close-btn" title="Close">
+        <h2>Password Anvil</h2>
+        <button id="btn-close-password-anvil" class="panel-close-btn" title="Close">
           <svg width="14" height="14" viewBox="0 0 14 14">
             <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
           </svg>
         </button>
       </div>
-      <div id="google-account-content" class="panel-content">
-        <!-- Content will be dynamically populated -->
+      <div class="panel-toolbar">
+        <input type="text" id="password-search" placeholder="Search passwords...">
+        <button id="btn-add-password" class="panel-btn" title="Add new password">Add New</button>
+        <button id="btn-import-passwords" class="panel-btn" title="Import from CSV">Import</button>
+      </div>
+      <div id="password-list" class="panel-list">
+        <!-- Password items will be dynamically added here -->
       </div>
     </div>
+
+    <!-- Password Add/Edit Modal -->
+    <div id="password-modal" class="modal-overlay hidden">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 id="password-modal-title">Add Password</h3>
+          <button id="btn-close-password-modal" class="panel-close-btn" title="Close">
+            <svg width="14" height="14" viewBox="0 0 14 14">
+              <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="password-edit-id">
+          <div class="form-group">
+            <label for="password-url">Website URL</label>
+            <input type="text" id="password-url" placeholder="https://example.com">
+          </div>
+          <div class="form-group">
+            <label for="password-username">Username</label>
+            <input type="text" id="password-username" placeholder="username@example.com">
+          </div>
+          <div class="form-group">
+            <label for="password-password">Password</label>
+            <input type="password" id="password-password" placeholder="••••••••">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-cancel-password" class="panel-btn">Cancel</button>
+          <button id="btn-save-password" class="panel-btn primary">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <input type="file" id="password-file-input" accept=".csv" style="display: none;">
 
     <!-- History Panel -->
     <div id="history-panel" class="panel hidden">
@@ -312,6 +347,7 @@
 
     <!-- AI Webview Panel (right side) -->
     <div id="ai-webview-panel" class="ai-webview-panel hidden">
+      <div id="ai-panel-resize" class="ai-panel-resize"></div>
       <div class="ai-webview-header">
         <div class="ai-webview-title">
           <span id="ai-webview-icon" class="ai-webview-icon"></span>
@@ -358,6 +394,6 @@
     </div>
   </div>
 
-  <script src="renderer.js"></script>
+  <script type="module" src="renderer.js"></script>
 </body>
 </html>

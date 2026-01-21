@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('forgeAPI', {
   
   // Window management
   createNewWindow: (url) => ipcRenderer.invoke('create-new-window', url),
+  createPasswordAnvilWindow: () => ipcRenderer.invoke('create-password-anvil-window'),
   
   // Google Auth
   googleAuth: {
@@ -105,4 +106,16 @@ contextBridge.exposeInMainWorld('forgeAPI', {
     open: (targetWebContentsId, devtoolsWebContentsId) => ipcRenderer.invoke('devtools-open', targetWebContentsId, devtoolsWebContentsId),
     close: (targetWebContentsId) => ipcRenderer.invoke('devtools-close', targetWebContentsId),
   },
+});
+
+// Expose password manager API
+contextBridge.exposeInMainWorld('electronAPI', {
+  passwords: {
+    getAll: () => ipcRenderer.invoke('passwords-get-all'),
+    getForUrl: (url) => ipcRenderer.invoke('passwords-get-for-url', url),
+    add: (url, username, password) => ipcRenderer.invoke('passwords-add', url, username, password),
+    update: (id, url, username, password) => ipcRenderer.invoke('passwords-update', id, url, username, password),
+    delete: (id) => ipcRenderer.invoke('passwords-delete', id),
+    importCSV: (csvData) => ipcRenderer.invoke('passwords-import-csv', csvData)
+  }
 });

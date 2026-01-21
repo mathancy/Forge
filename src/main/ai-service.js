@@ -15,7 +15,7 @@ class AIService {
     this.providers = {
       chatgpt: {
         name: 'ChatGPT',
-        icon: 'chatgpt',
+        icon: 'gpt',
         url: 'https://chatgpt.com'
       },
       claude: {

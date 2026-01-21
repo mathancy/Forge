@@ -7,7 +7,7 @@ class FavoritesService {
         this.configPath = null;
         this.favorites = [];
         this.enabled = false;
-        this.maxSlots = 5;
+        this.maxSlots = 10;
     }
 
     initialize() {
@@ -22,20 +22,17 @@ class FavoritesService {
                 this.favorites = data.favorites || [];
                 this.enabled = data.enabled ?? false;
                 
-                // Ensure we have exactly 5 slots
-                while (this.favorites.length < this.maxSlots) {
-                    this.favorites.push(null);
-                }
+                // Ensure we have up to maxSlots
                 this.favorites = this.favorites.slice(0, this.maxSlots);
             } else {
-                // Initialize with 5 empty slots
-                this.favorites = [null, null, null, null, null];
+                // Initialize with empty array
+                this.favorites = [];
                 this.enabled = false;
                 this.saveConfig();
             }
         } catch (e) {
             console.error('Failed to load favorites config:', e);
-            this.favorites = [null, null, null, null, null];
+            this.favorites = [];
             this.enabled = false;
         }
     }

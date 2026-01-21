@@ -1,58 +1,109 @@
-// Forge Browser - Renderer Process
+// Forge Browser - Renderer Process (Modular)
 // Lightweight browser by Forgeworks Interactive Limited
 
+// Import modules
+import { escapeHtml, isInternalUrl, getDomain, formatCount, debounce, generateId } from './modules/utils.js';
+import { TabManagerMixin } from './modules/tab-manager.js';
+import { NavigationMixin } from './modules/navigation.js';
+import { WebviewEventsMixin } from './modules/webview-events.js';
+import { UIPanelsMixin } from './modules/ui-panels.js';
+import { PasswordManagerMixin } from './modules/password-manager.js';
+import { HistoryMixin } from './modules/history.js';
+import { FavoritesMixin } from './modules/favorites.js';
+import { AdBlockerMixin } from './modules/ad-blocker.js';
+import { AIAssistantMixin } from './modules/ai-assistant.js';
+import { UrlSuggestionsMixin } from './modules/url-suggestions.js';
+
+console.log('[Forge] Loading modular renderer...');
+
+/**
+ * Apply mixin methods to a class prototype
+ */
+function applyMixin(targetClass, mixin) {
+  Object.keys(mixin).forEach(key => {
+    if (typeof mixin[key] === 'function') {
+      targetClass.prototype[key] = mixin[key];
+    }
+  });
+}
+
+/**
+ * Main ForgeBrowser class
+ */
 class ForgeBrowser {
   constructor() {
+    console.log('[Forge] Initializing browser...');
+    
+    // Core state
     this.tabs = [];
     this.activeTabId = null;
     this.tabCounter = 0;
     this.homepage = 'https://www.google.com';
     
-    // Favicon cache: Map of domain -> {url: faviconUrl, timestamp: Date}
+    // Favicon cache
     this.faviconCache = new Map();
     this.loadFaviconCache();
     
-    // Browser history: Array of {url, title, favicon, timestamp}
+    // Browser history
     this.browsingHistory = [];
     this.loadBrowsingHistory();
     
-    // Site logo mapping for custom branding
+    // Site logos
     this.siteLogos = {
       'www.youtube.com': 'forge-asset://site-logos/YouTube.svg',
       'youtube.com': 'forge-asset://site-logos/YouTube.svg',
       'm.youtube.com': 'forge-asset://site-logos/YouTube.svg',
       'www.google.com': 'forge-asset://site-logos/Google.svg',
-      'google.com': 'forge-asset://site-logos/Google.svg'
+      'google.com': 'forge-asset://site-logos/Google.svg',
+      'www.twitch.tv': 'forge-asset://site-logos/Twitch.svg',
+      'twitch.tv': 'forge-asset://site-logos/Twitch.svg',
+      'm.twitch.tv': 'forge-asset://site-logos/Twitch.svg'
     };
     
+    // Drag state
+    this.draggedTab = null;
+    this.isDragging = false;
+    this.dragStartX = 0;
+    
+    // Initialize
     this.init();
   }
 
   async init() {
+    console.log('[Forge] Running init...');
+    
     this.cacheElements();
     this.bindEvents();
     this.setupWindowControls();
+    this.setupDragHandlers();
     this.initUpdateListener();
+    this.initUrlSuggestions();
+    
+    // Initialize modules
+    await this.initAdBlocker();
+    await this.initFavorites();
+    await this.initAIProviders();
+    this.initAIPanelResize();
+    this.initPasswordManager();
     
     // Display app info
     const appInfo = await window.forgeAPI.getAppInfo();
     console.log(`${appInfo.name} v${appInfo.version} by ${appInfo.company}`);
     console.log(`Electron: ${appInfo.electronVersion}, Chrome: ${appInfo.chromeVersion}`);
     
-    // Listen for open-url message from main process
+    // Listen for open-url message
     let urlOpened = false;
     window.forgeAPI.onOpenUrl((url) => {
       if (!urlOpened) {
         urlOpened = true;
-        // Close the Home tab if it was created
         if (this.tabs.length === 1 && this.tabs[0].isHome) {
-          this.closeTab(this.tabs[0].id, true); // true = skip confirmation
+          this.closeTab(this.tabs[0].id, true);
         }
         this.createTab(url);
       }
     });
     
-    // Create initial Home tab after a small delay to allow open-url to fire first
+    // Create initial Home tab
     setTimeout(() => {
       if (!urlOpened) {
         this.createHomeTab();
@@ -60,9 +111,12 @@ class ForgeBrowser {
     }, 50);
     
     this.updateStatus('Ready');
+    console.log('[Forge] Initialization complete');
   }
 
   cacheElements() {
+    console.log('[Forge] Caching elements...');
+    
     // Window controls
     this.btnMinimize = document.getElementById('btn-minimize');
     this.btnMaximize = document.getElementById('btn-maximize');
@@ -71,6 +125,9 @@ class ForgeBrowser {
     // Tab bar
     this.tabsContainer = document.getElementById('tabs-container');
     this.btnNewTab = document.getElementById('btn-new-tab');
+    
+    console.log('[Forge] tabsContainer:', this.tabsContainer);
+    console.log('[Forge] btnNewTab:', this.btnNewTab);
     
     // Navigation
     this.btnBack = document.getElementById('btn-back');
@@ -91,11 +148,9 @@ class ForgeBrowser {
     this.statusText = document.getElementById('status-text');
     this.statusInfo = document.getElementById('status-info');
     
-    // Context menu
+    // Context menus
     this.tabContextMenu = document.getElementById('tab-context-menu');
     this.contextMenuTabId = null;
-    
-    // Webview context menu
     this.webviewContextMenu = document.getElementById('webview-context-menu');
     this.contextMenuOverlay = document.getElementById('context-menu-overlay');
     this.contextMenuWebview = null;
@@ -112,11 +167,23 @@ class ForgeBrowser {
     this.btnCloseHistory = document.getElementById('btn-close-history');
     this.btnClearHistory = document.getElementById('btn-clear-history');
     
-    // Google Account panel
-    this.googleAccountPanel = document.getElementById('google-account-panel');
-    this.googleAccountContent = document.getElementById('google-account-content');
-    this.btnCloseGooglePanel = document.getElementById('btn-close-google-panel');
-    this.googleAccountText = document.getElementById('google-account-text');
+    // Password Anvil panel
+    this.passwordAnvilPanel = document.getElementById('password-anvil-panel');
+    this.passwordList = document.getElementById('password-list');
+    this.passwordSearch = document.getElementById('password-search');
+    this.btnClosePasswordAnvil = document.getElementById('btn-close-password-anvil');
+    this.btnAddPassword = document.getElementById('btn-add-password');
+    this.btnImportPasswords = document.getElementById('btn-import-passwords');
+    this.passwordModal = document.getElementById('password-modal');
+    this.passwordModalTitle = document.getElementById('password-modal-title');
+    this.btnClosePasswordModal = document.getElementById('btn-close-password-modal');
+    this.btnCancelPassword = document.getElementById('btn-cancel-password');
+    this.btnSavePassword = document.getElementById('btn-save-password');
+    this.passwordEditId = document.getElementById('password-edit-id');
+    this.passwordUrlInput = document.getElementById('password-url');
+    this.passwordUsernameInput = document.getElementById('password-username');
+    this.passwordPasswordInput = document.getElementById('password-password');
+    this.passwordFileInput = document.getElementById('password-file-input');
     
     // Chrome Import panel
     this.chromeImportPanel = document.getElementById('chrome-import-panel');
@@ -130,7 +197,7 @@ class ForgeBrowser {
     this.btnCheckUpdates = document.getElementById('btn-check-updates');
     this.updateStatusElement = document.getElementById('update-status');
     
-    // AI Assistant elements
+    // AI Assistant
     this.aiButtons = document.getElementById('ai-buttons');
     this.aiSettingsPanel = document.getElementById('ai-settings-panel');
     this.aiSettingsContent = document.getElementById('ai-settings-content');
@@ -140,12 +207,10 @@ class ForgeBrowser {
     this.aiWebviewIcon = document.getElementById('ai-webview-icon');
     this.aiWebviewName = document.getElementById('ai-webview-name');
     this.btnAIWebviewClose = document.getElementById('btn-ai-webview-close');
-    
-    // AI state
     this.currentAIProvider = null;
     this.aiWebview = null;
     
-    // Favorites elements
+    // Favorites
     this.btnFavorites = document.getElementById('btn-favorites');
     this.favoritesToggle = document.getElementById('favorites-toggle');
     this.favoritesPanel = document.getElementById('favorites-panel');
@@ -156,22 +221,21 @@ class ForgeBrowser {
     this.btnCloseFavoritesDialog = document.getElementById('btn-close-favorites-dialog');
     this.btnCancelFavorite = document.getElementById('btn-cancel-favorite');
     this.btnSaveFavorite = document.getElementById('btn-save-favorite');
-    
-    // Favorites state
     this.favoritesEnabled = false;
     this.favorites = [];
     this.editingFavoriteSlot = null;
     
-    // Ad-blocker elements
+    // Hide favorites button until settings load
+    if (this.btnFavorites) this.btnFavorites.style.display = 'none';
+    
+    // Ad-blocker
     this.adblockToggle = document.getElementById('adblock-toggle');
     this.adblockStats = document.getElementById('adblock-stats');
-    
-    // Ad-blocker state
     this.adblockEnabled = true;
     this.adblockBlockedCount = 0;
     
-    // Hide favorites button until settings load
-    this.btnFavorites.style.display = 'none';
+    // URL suggestions
+    this.urlSuggestions = document.getElementById('url-suggestions');
   }
 
   bindEvents() {
@@ -185,103 +249,123 @@ class ForgeBrowser {
     this.btnHome.addEventListener('click', () => this.goHome());
     
     // URL input
-    // Autocomplete suggestions
-    this.urlSuggestions = document.getElementById('url-suggestions');
-    this.suggestions = [];
-    this.selectedSuggestionIndex = -1;
-    this.suggestionDebounceTimer = null;
-    this.lastUserInput = ''; // Track what the user actually typed
-    
-    this.urlInput.addEventListener('input', (e) => {
-      // Check if user is deleting (backspace/delete removes selection or chars)
-      const currentValue = this.urlInput.value;
-      const selectionStart = this.urlInput.selectionStart;
-      
-      // If user typed and there was a selection (autocomplete), they're replacing it
-      // Get only the portion before the selection as user's actual input
-      if (selectionStart !== currentValue.length) {
-        // Selection exists, user's input is up to cursor
-        this.lastUserInput = currentValue.substring(0, selectionStart);
-      } else {
-        // No selection, this is the actual user input
-        this.lastUserInput = currentValue;
-      }
-      
-      this.handleUrlInputChange();
-    });
-    
+    this.urlInput.addEventListener('input', () => this.handleUrlInputChange());
     this.urlInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        if (this.selectedSuggestionIndex >= 0 && this.suggestions[this.selectedSuggestionIndex]) {
-          this.navigate(this.suggestions[this.selectedSuggestionIndex]);
-          this.hideSuggestions();
-        } else {
-          // Navigate to whatever is in the input (may include inline completion)
-          const input = this.urlInput.value.trim();
-          this.navigate(input);
-          this.hideSuggestions();
-        }
-      } else if (e.key === 'Escape') {
-        // Restore user's original input and hide suggestions
-        if (this.lastUserInput) {
-          this.urlInput.value = this.lastUserInput;
-        }
+        e.preventDefault();
         this.hideSuggestions();
-      } else if (e.key === 'Backspace') {
-        // If there's an inline completion (selection exists), backspace should delete from user's typed input
-        const selectionStart = this.urlInput.selectionStart;
-        const selectionEnd = this.urlInput.selectionEnd;
-        
-        if (selectionStart !== selectionEnd && this.lastUserInput && selectionStart === this.lastUserInput.length) {
-          // There's an autocomplete selection - delete from the user's actual typed input
-          e.preventDefault();
-          if (this.lastUserInput.length > 0) {
-            this.lastUserInput = this.lastUserInput.slice(0, -1);
-            this.urlInput.value = this.lastUserInput;
-            this.urlInput.setSelectionRange(this.lastUserInput.length, this.lastUserInput.length);
-            this.handleUrlInputChange();
-          }
-        }
+        this.navigate(this.urlInput.value);
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         this.selectNextSuggestion();
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         this.selectPrevSuggestion();
-      } else if (e.key === 'ArrowRight') {
-        // Accept the inline completion when pressing right arrow at end of typed input
-        const selectionStart = this.urlInput.selectionStart;
-        const selectionEnd = this.urlInput.selectionEnd;
-        if (selectionStart !== selectionEnd && selectionStart === this.lastUserInput.length) {
-          // Accept the completion
-          this.urlInput.setSelectionRange(this.urlInput.value.length, this.urlInput.value.length);
-          this.lastUserInput = this.urlInput.value;
-        }
+      } else if (e.key === 'Escape') {
+        this.hideSuggestions();
       }
     });
     
     this.urlInput.addEventListener('focus', () => {
       this.urlInput.select();
-      if (this.urlInput.value.trim()) {
-        this.handleUrlInputChange();
-      }
     });
     
     this.urlInput.addEventListener('blur', () => {
-      // Delay hiding to allow click on suggestion
-      setTimeout(() => this.hideSuggestions(), 200);
+      setTimeout(() => this.hideSuggestions(), 150);
     });
     
     // Home search
-    this.homeSearch.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        this.createTab(this.processUrl(this.homeSearch.value));
-        this.homeSearch.value = '';
+    if (this.homeSearch) {
+      this.homeSearch.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.navigate(this.homeSearch.value);
+          this.homeSearch.value = '';
+        }
+      });
+    }
+    
+    // Main menu
+    if (this.btnMenu) {
+      this.btnMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleMainMenu();
+      });
+    }
+    
+    // Menu items
+    const toggleActions = ['favorites', 'adblock']; // Actions that don't close the menu
+    document.querySelectorAll('#main-menu .context-menu-item[data-action]').forEach(item => {
+      item.addEventListener('click', () => {
+        const action = item.dataset.action;
+        this.handleMainMenuAction(action);
+        if (!toggleActions.includes(action)) {
+          this.hideMainMenu();
+        }
+      });
+    });
+    
+    // Panel close buttons
+    if (this.btnCloseHistory) this.btnCloseHistory.addEventListener('click', () => this.hideHistoryPanel());
+    if (this.btnClearHistory) this.btnClearHistory.addEventListener('click', () => this.clearHistory());
+    if (this.historySearch) this.historySearch.addEventListener('input', () => this.filterHistory());
+    if (this.btnCloseAbout) this.btnCloseAbout.addEventListener('click', () => this.hideAboutPanel());
+    if (this.btnCheckUpdates) this.btnCheckUpdates.addEventListener('click', () => this.checkForUpdates());
+    if (this.btnCloseChromeImport) this.btnCloseChromeImport.addEventListener('click', () => this.hideChromeImportPanel());
+    if (this.btnCloseAISettings) this.btnCloseAISettings.addEventListener('click', () => this.hideAISettingsPanel());
+    if (this.btnAIWebviewClose) this.btnAIWebviewClose.addEventListener('click', () => this.hideAIWebviewPanel());
+    
+    // Password Anvil
+    if (this.btnClosePasswordAnvil) this.btnClosePasswordAnvil.addEventListener('click', () => this.hidePasswordAnvilPanel());
+    if (this.btnAddPassword) this.btnAddPassword.addEventListener('click', () => this.showPasswordModal());
+    if (this.btnImportPasswords) this.btnImportPasswords.addEventListener('click', () => this.passwordFileInput?.click());
+    if (this.btnClosePasswordModal) this.btnClosePasswordModal.addEventListener('click', () => this.hidePasswordModal());
+    if (this.btnCancelPassword) this.btnCancelPassword.addEventListener('click', () => this.hidePasswordModal());
+    if (this.btnSavePassword) this.btnSavePassword.addEventListener('click', () => this.savePassword());
+    if (this.passwordSearch) this.passwordSearch.addEventListener('input', () => this.filterPasswords());
+    if (this.passwordFileInput) this.passwordFileInput.addEventListener('change', (e) => this.importPasswordsCSV(e.target.files[0]));
+    if (this.passwordModal) this.passwordModal.addEventListener('click', (e) => { if (e.target === this.passwordModal) this.hidePasswordModal(); });
+    
+    // Favorites
+    if (this.btnFavorites) this.btnFavorites.addEventListener('click', () => this.toggleFavoritesPanel());
+    if (this.favoritesToggle) {
+      this.favoritesToggle.addEventListener('change', () => this.toggleFavoritesEnabled());
+    }
+    if (this.btnCloseFavoritesDialog) this.btnCloseFavoritesDialog.addEventListener('click', () => this.hideFavoritesDialog());
+    if (this.btnCancelFavorite) this.btnCancelFavorite.addEventListener('click', () => this.hideFavoritesDialog());
+    if (this.btnSaveFavorite) this.btnSaveFavorite.addEventListener('click', () => this.saveFavorite());
+    
+    // Ad blocker toggle
+    if (this.adblockToggle) {
+      this.adblockToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleAdBlocker();
+      });
+    }
+    
+    // Context menu overlay
+    if (this.contextMenuOverlay) {
+      this.contextMenuOverlay.addEventListener('click', () => this.hideWebviewContextMenu());
+    }
+    
+    // Close popups on click outside
+    document.addEventListener('click', (e) => {
+      if (this.mainMenu && !this.mainMenu.classList.contains('hidden') && 
+          !this.mainMenu.contains(e.target) && !this.btnMenu.contains(e.target)) {
+        this.hideMainMenu();
+      }
+      if (this.tabContextMenu && !this.tabContextMenu.classList.contains('hidden') && 
+          !this.tabContextMenu.contains(e.target)) {
+        this.hideContextMenu();
       }
     });
     
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
+      // Skip shortcuts when typing in input fields (except for specific combos)
+      const isInputFocused = document.activeElement?.tagName === 'INPUT' || 
+                             document.activeElement?.tagName === 'TEXTAREA';
+      
       // Ctrl+T: New tab
       if (e.ctrlKey && e.key === 't') {
         e.preventDefault();
@@ -290,923 +374,93 @@ class ForgeBrowser {
       // Ctrl+W: Close tab
       if (e.ctrlKey && e.key === 'w') {
         e.preventDefault();
-        if (this.activeTabId) {
-          this.closeTab(this.activeTabId);
-        }
+        if (this.activeTabId) this.closeTab(this.activeTabId);
       }
       // Ctrl+L: Focus URL bar
       if (e.ctrlKey && e.key === 'l') {
         e.preventDefault();
         this.urlInput.focus();
+        this.urlInput.select();
       }
-      // F5 or Ctrl+R: Reload
-      if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
+      // Ctrl+R / F5: Reload (only when not in input)
+      if ((e.ctrlKey && e.key === 'r') || (e.key === 'F5' && !isInputFocused)) {
         e.preventDefault();
         this.reload();
       }
-      // Alt+Left: Back
-      if (e.altKey && e.key === 'ArrowLeft') {
-        e.preventDefault();
-        this.goBack();
-      }
-      // Alt+Right: Forward
-      if (e.altKey && e.key === 'ArrowRight') {
-        e.preventDefault();
-        this.goForward();
+      // Escape: Close panels
+      if (e.key === 'Escape') {
+        this.closeAllPopups();
       }
     });
-    
-    // Global click handler to close all popups/menus
-    document.addEventListener('click', (e) => {
-      // Close tab context menu if clicking outside
-      if (!this.tabContextMenu.contains(e.target) && !e.target.closest('.tab')) {
-        this.hideContextMenu();
-      }
-      // Close webview context menu if clicking outside
-      if (!this.webviewContextMenu.contains(e.target)) {
-        this.hideWebviewContextMenu();
-      }
-      // Close main menu if clicking outside
-      if (!this.mainMenu.contains(e.target) && !e.target.closest('#btn-menu')) {
-        this.hideMainMenu();
-      }
-      // Close URL suggestions if clicking outside the URL container
-      if (!e.target.closest('.url-container')) {
-        this.hideSuggestions();
-      }
-    });
-    
-    // Context menu item clicks
-    this.tabContextMenu.addEventListener('click', (e) => {
-      const item = e.target.closest('.context-menu-item');
-      if (item) {
-        const action = item.dataset.action;
-        this.handleContextMenuAction(action, item);
-        this.hideContextMenu();
-      }
-    });
-    
-    // Webview context menu item clicks
-    this.webviewContextMenu.addEventListener('click', (e) => {
-      const item = e.target.closest('.context-menu-item');
-      if (item && !item.classList.contains('disabled')) {
-        const action = item.dataset.action;
-        this.handleWebviewContextMenuAction(action);
-      }
-    });
-    
-    // Context menu overlay click - closes webview context menu
-    this.contextMenuOverlay.addEventListener('click', () => {
-      this.hideWebviewContextMenu();
-    });
-    
-    // Close popups when clicking on browser content area (welcome page area)
-    this.browserContent.addEventListener('click', () => {
-      this.closeAllPopups();
-    });
-    
-    // Main menu button click
-    this.btnMenu.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleMainMenu();
-    });
-    
-    // Main menu item clicks
-    this.mainMenu.addEventListener('click', (e) => {
-      const item = e.target.closest('.context-menu-item');
-      if (item) {
-        const action = item.dataset.action;
-        this.handleMainMenuAction(action);
-        this.hideMainMenu();
-      }
-    });
-    
-    // History panel events
-    this.btnCloseHistory.addEventListener('click', () => this.hideHistoryPanel());
-    this.btnClearHistory.addEventListener('click', () => this.clearHistory());
-    this.historySearch.addEventListener('input', () => this.filterHistory());
-    
-    // Google Account panel events
-    this.btnCloseGooglePanel.addEventListener('click', () => this.hideGoogleAccountPanel());
-    
-    // Chrome Import panel events
-    this.btnCloseChromeImport.addEventListener('click', () => this.hideChromeImportPanel());
-    
-    // About panel events
-    this.btnCloseAbout.addEventListener('click', () => this.hideAboutPanel());
-    this.btnCheckUpdates.addEventListener('click', () => this.checkForUpdates());
-    
-    // AI Assistant events
-    this.btnCloseAISettings.addEventListener('click', () => this.hideAISettingsPanel());
-    this.btnAIWebviewClose.addEventListener('click', () => this.hideAIWebviewPanel());
-    
-    // Favorites events
-    this.btnFavorites.addEventListener('click', () => this.toggleFavoritesPanel());
-    this.btnCloseFavoritesDialog.addEventListener('click', () => this.hideFavoritesDialog());
-    this.btnCancelFavorite.addEventListener('click', () => this.hideFavoritesDialog());
-    this.btnSaveFavorite.addEventListener('click', () => this.saveFavorite());
-    this.favoriteUrlInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this.saveFavorite();
-    });
-    
-    // Initialize Favorites
-    this.initFavorites();
-    
-    // Initialize Ad Blocker
-    this.initAdBlocker();
-    
-    // Initialize Google auth status
-    this.updateGoogleAuthStatus();
-    
-    // Initialize AI providers
-    this.initAIProviders();
-    
-    // Custom tab drag and drop for reordering (using mouse events for cursor control)
-    this.draggedTab = null;
-    this.isDragging = false;
-    this.dragStartX = 0;
-    this.dragThreshold = 5; // pixels before drag starts
-    
-    // Mouse move handler for dragging
-    this.handleMouseMove = (e) => {
-      if (!this.draggedTab) return;
-      
-      // Check if we've passed the drag threshold
-      if (!this.isDragging) {
-        const distance = Math.abs(e.clientX - this.dragStartX);
-        if (distance < this.dragThreshold) return;
-        
-        // Start actual dragging
-        this.isDragging = true;
-        this.draggedTab.classList.add('dragging');
-        document.documentElement.classList.add('tab-dragging');
-        document.body.classList.add('tab-dragging');
-        this.tabsContainer.classList.add('dragging-active');
-      }
-      
-      // Reorder tabs based on mouse position
-      const afterElement = this.getDragAfterElement(this.tabsContainer, e.clientX);
-      
-      if (afterElement == null) {
-        this.tabsContainer.appendChild(this.draggedTab);
-      } else if (afterElement !== this.draggedTab) {
-        this.tabsContainer.insertBefore(this.draggedTab, afterElement);
-      }
-    };
-    
-    // Mouse up handler to end dragging
-    this.handleMouseUp = (e) => {
-      if (this.draggedTab) {
-        if (this.isDragging) {
-          this.draggedTab.classList.remove('dragging');
-          document.documentElement.classList.remove('tab-dragging');
-          document.body.classList.remove('tab-dragging');
-          this.tabsContainer.classList.remove('dragging-active');
-          // Update tabs array to match DOM order
-          this.reorderTabsArray();
-        }
-        this.draggedTab = null;
-        this.isDragging = false;
-      }
-      document.removeEventListener('mousemove', this.handleMouseMove);
-      document.removeEventListener('mouseup', this.handleMouseUp);
-    };
   }
 
   setupWindowControls() {
-    this.btnMinimize.addEventListener('click', () => window.forgeAPI.minimize());
-    this.btnMaximize.addEventListener('click', () => window.forgeAPI.maximize());
-    this.btnClose.addEventListener('click', () => window.forgeAPI.close());
+    console.log('[Forge] Setting up window controls...');
+    console.log('[Forge] btnMinimize:', this.btnMinimize);
+    console.log('[Forge] btnMaximize:', this.btnMaximize);
+    console.log('[Forge] btnClose:', this.btnClose);
     
-    window.forgeAPI.onMaximized(() => {
-      this.btnMaximize.title = 'Restore';
-    });
-    
-    window.forgeAPI.onRestored(() => {
-      this.btnMaximize.title = 'Maximize';
-    });
+    if (this.btnMinimize) {
+      this.btnMinimize.addEventListener('click', () => {
+        console.log('[Forge] Minimize clicked');
+        window.forgeAPI.minimize();
+      });
+    }
+    if (this.btnMaximize) {
+      this.btnMaximize.addEventListener('click', () => {
+        console.log('[Forge] Maximize clicked');
+        window.forgeAPI.maximize();
+      });
+    }
+    if (this.btnClose) {
+      this.btnClose.addEventListener('click', () => {
+        console.log('[Forge] Close clicked');
+        window.forgeAPI.close();
+      });
+    }
   }
 
-  createTab(url = null) {
-    const tabId = `tab-${++this.tabCounter}`;
-    
-    // Create tab element
-    const tab = document.createElement('div');
-    tab.className = 'tab';
-    tab.dataset.tabId = tabId;
-    tab.innerHTML = `
-      <img class="tab-favicon tab-icon-plus" src="forge-asset://ui-icons/plus.svg" alt="">
-      <span class="tab-title">New Tab</span>
-      <button class="tab-close" title="Close tab">
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5"/>
-        </svg>
-      </button>
-    `;
-    
-    // Mouse-based drag handler (replaces native drag API for cursor control)
-    tab.addEventListener('mousedown', (e) => {
-      // Only start drag on left click and not on close button
-      if (e.button !== 0 || e.target.closest('.tab-close')) return;
+  setupDragHandlers() {
+    this.handleMouseMove = (e) => {
+      if (!this.draggedTab) return;
       
-      this.draggedTab = tab;
-      this.isDragging = false;
-      this.dragStartX = e.clientX;
+      const deltaX = Math.abs(e.clientX - this.dragStartX);
+      if (deltaX > 5) {
+        this.isDragging = true;
+        this.draggedTab.classList.add('dragging');
+      }
       
-      document.addEventListener('mousemove', this.handleMouseMove);
-      document.addEventListener('mouseup', this.handleMouseUp);
-    });
-    
-    // Tab click handler
-    tab.addEventListener('click', (e) => {
-      // Don't switch tabs if we just finished dragging
       if (this.isDragging) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      if (!e.target.closest('.tab-close')) {
-        this.switchTab(tabId);
-      }
-    });
-    
-    // Tab right-click handler
-    tab.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      this.showContextMenu(e.clientX, e.clientY, tabId);
-    });
-    
-    // Close button handler
-    tab.querySelector('.tab-close').addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.closeTab(tabId);
-    });
-    
-    this.tabsContainer.appendChild(tab);
-    
-    // Create webview
-    const webview = document.createElement('webview');
-    webview.id = tabId;
-    webview.setAttribute('allowpopups', '');
-    webview.setAttribute('partition', 'persist:main');
-    webview.setAttribute('webpreferences', 'contextIsolation=yes');
-    
-    // Webview event handlers
-    webview.addEventListener('did-start-loading', () => {
-      this.updateStatus('Loading...');
-      this.updateTabLoading(tabId, true);
-    });
-    
-    webview.addEventListener('did-stop-loading', () => {
-      this.updateStatus('Ready');
-      this.updateTabLoading(tabId, false);
-    });
-    
-    webview.addEventListener('page-title-updated', (e) => {
-      this.updateTabTitle(tabId, e.title);
-    });
-    
-    webview.addEventListener('page-favicon-updated', (e) => {
-      if (e.favicons && e.favicons.length > 0) {
-        this.updateTabFavicon(tabId, e.favicons[0]);
-      }
-    });
-    
-    webview.addEventListener('did-navigate', (e) => {
-      const tab = this.tabs.find(t => t.id === tabId);
-      if (tabId === this.activeTabId) {
-        this.urlInput.value = e.url;
-        this.updateSecurityIndicator(e.url);
-        this.updateNavigationButtons();
-      }
-      // Add to browsing history (exclude home and internal pages)
-      if (!e.url.startsWith('forge://') && !e.url.startsWith('about:')) {
-        const title = tab ? tab.title : 'New Tab';
-        const favicon = tab ? tab.favicon : null;
-        this.addToHistory(e.url, title, favicon);
-      }
-      
-      // Inject cosmetic CSS to hide ad elements
-      this.injectCosmeticCSS(webview, e.url);
-      // Inject ad-blocking scripts (YouTube, etc.)
-      this.injectAdBlockScript(webview, e.url);
-    });
-    
-    // Inject scripts as early as possible for YouTube
-    webview.addEventListener('dom-ready', () => {
-      try {
-        const url = webview.getURL();
-        if (url) {
-          this.injectAdBlockScript(webview, url);
-          this.injectCosmeticCSS(webview, url);
-        }
-      } catch (e) {
-        console.error('[Webview] Error in dom-ready handler:', e);
-      }
-    });
-    
-    webview.addEventListener('did-navigate-in-page', (e) => {
-      const tab = this.tabs.find(t => t.id === tabId);
-      if (tabId === this.activeTabId && e.isMainFrame) {
-        this.urlInput.value = e.url;
-        this.updateSecurityIndicator(e.url);
-        this.updateNavigationButtons();
-      }
-      // Add to browsing history for in-page navigation too
-      if (e.isMainFrame && !e.url.startsWith('forge://') && !e.url.startsWith('about:')) {
-        const title = tab ? tab.title : 'New Tab';
-        const favicon = tab ? tab.favicon : null;
-        this.addToHistory(e.url, title, favicon);
-        
-        // Re-inject cosmetic CSS for SPA navigations
-        this.injectCosmeticCSS(webview, e.url);
-        // Re-inject ad-blocking scripts for SPA navigations
-        this.injectAdBlockScript(webview, e.url);
-      }
-    });
-    
-    webview.addEventListener('new-window', (e) => {
-      // Open new windows in a new tab
-      this.createTab(e.url);
-    });
-    
-    // Context menu for webview
-    webview.addEventListener('context-menu', (e) => {
-      this.showWebviewContextMenu(e, webview);
-    });
-    
-    // Close all popups when webview gets focus (user clicks on it)
-    webview.addEventListener('focus', () => {
-      this.closeAllPopups();
-    });
-    
-    // Audio playing detection - use IPC to check audio state from main process
-    const checkAudioState = async () => {
-      const tab = this.tabs.find(t => t.id === tabId);
-      if (!tab || !tab.webview) return;
-      
-      try {
-        const webContentsId = webview.getWebContentsId ? webview.getWebContentsId() : null;
-        if (webContentsId) {
-          const isCurrentlyAudible = await window.forgeAPI.isWebContentsAudible(webContentsId);
-          const wasPlaying = tab.isPlayingAudio;
-          
-          if (isCurrentlyAudible !== wasPlaying) {
-            tab.isPlayingAudio = isCurrentlyAudible;
-            this.updateTabAudioIcon(tabId);
-          }
-        }
-      } catch (e) {
-        // Webview might not be ready yet
-      }
-    };
-    
-    // Start audio checking after webview is ready
-    webview.addEventListener('dom-ready', () => {
-      const audioCheckInterval = setInterval(checkAudioState, 500);
-      const tab = this.tabs.find(t => t.id === tabId);
-      if (tab) {
-        tab.audioCheckInterval = audioCheckInterval;
-      }
-      checkAudioState();
-    });
-    
-    this.browserContent.appendChild(webview);
-    
-    // Store tab info with history tracking
-    this.tabs.push({
-      id: tabId,
-      element: tab,
-      webview: webview,
-      title: 'New Tab',
-      url: '',
-      history: [], // Custom history stack
-      historyIndex: -1, // Current position in history
-      isPlayingAudio: false,
-      isMuted: false,
-      adBlockCount: 0 // Track ads blocked for this tab
-    });
-    
-    // Switch to new tab and navigate if URL provided
-    this.switchTab(tabId);
-    
-    if (url) {
-      webview.src = url;
-    }
-    
-    return tabId;
-  }
-
-  closeTab(tabId, skipAnimation = false) {
-    const tabIndex = this.tabs.findIndex(t => t.id === tabId);
-    if (tabIndex === -1) return;
-    
-    const tab = this.tabs[tabIndex];
-    
-    // Clean up audio check interval
-    if (tab.audioCheckInterval) {
-      clearInterval(tab.audioCheckInterval);
-    }
-    
-    if (!skipAnimation) {
-      // Add closing animation
-      tab.element.classList.add('closing');
-    }
-    
-    const removeTab = () => {
-      // Remove elements
-      tab.element.remove();
-      if (tab.webview) {
-        tab.webview.remove();
-      }
-      
-      // Remove from array
-      this.tabs.splice(tabIndex, 1);
-      
-      // If closed tab was active, switch to another tab
-      if (tabId === this.activeTabId) {
-        if (this.tabs.length > 0) {
-          const newActiveIndex = Math.min(tabIndex, this.tabs.length - 1);
-          this.switchTab(this.tabs[newActiveIndex].id);
+        const afterElement = this.getDragAfterElement(this.tabsContainer, e.clientX);
+        if (afterElement) {
+          this.tabsContainer.insertBefore(this.draggedTab, afterElement);
         } else {
-          // No tabs left, create a new home tab
-          this.activeTabId = null;
-          this.createHomeTab();
+          const newTabBtn = this.tabsContainer.querySelector('#btn-new-tab');
+          if (newTabBtn) {
+            this.tabsContainer.insertBefore(this.draggedTab, newTabBtn);
+          } else {
+            this.tabsContainer.appendChild(this.draggedTab);
+          }
         }
       }
-      
-      this.updateStatus(`Closed tab`);
     };
     
-    if (skipAnimation) {
-      removeTab();
-    } else {
-      // Wait for animation to complete before removing
-      setTimeout(removeTab, 300); // Match animation duration
-    }
-  }
-
-  switchTab(tabId) {
-    // Deactivate current tab
-    this.tabs.forEach(tab => {
-      tab.element.classList.remove('active');
-      if (tab.webview) {
-        tab.webview.classList.remove('active');
-      }
-    });
-    
-    // Activate new tab
-    const tab = this.tabs.find(t => t.id === tabId);
-    if (tab) {
-      tab.element.classList.add('active');
-      this.activeTabId = tabId;
-      
-      // Update ad counter for this tab
-      this.updateAdCounter(tab.adsBlocked || 0);
-      
-      if (tab.isHome) {
-        // Show welcome page for home tab
-        this.welcomePage.classList.remove('hidden');
-        this.urlInput.value = '';
-        this.updateSecurityIndicator('');
-        this.btnBack.disabled = true;
-        this.btnForward.disabled = true;
-      } else {
-        // Hide welcome page and show webview
-        this.welcomePage.classList.add('hidden');
-        if (tab.webview) {
-          tab.webview.classList.add('active');
-          
-          // Update URL bar
-          try {
-            const currentUrl = tab.webview.getURL();
-            this.urlInput.value = currentUrl || '';
-            this.updateSecurityIndicator(currentUrl);
-          } catch (e) {
-            this.urlInput.value = '';
-          }
-          
-          this.updateNavigationButtons();
+    this.handleMouseUp = () => {
+      if (this.draggedTab) {
+        this.draggedTab.classList.remove('dragging');
+        if (this.isDragging) {
+          this.reorderTabsArray();
         }
-      }
-    }
-  }
-
-  showWelcomePage() {
-    this.welcomePage.classList.remove('hidden');
-    this.urlInput.value = '';
-    this.updateSecurityIndicator('');
-    this.btnBack.disabled = true;
-    this.btnForward.disabled = true;
-  }
-
-  navigate(input) {
-    const url = this.processUrl(input);
-    
-    if (this.activeTabId) {
-      const tab = this.tabs.find(t => t.id === this.activeTabId);
-      if (tab) {
-        this.navigateTabTo(tab, url);
-      }
-    } else {
-      this.createTab(url);
-    }
-  }
-
-  navigateTabTo(tab, url) {
-    // Add to history (remove any forward history when navigating to new page)
-    tab.history = tab.history.slice(0, tab.historyIndex + 1);
-    tab.history.push(url);
-    tab.historyIndex = tab.history.length - 1;
-    
-    // Load the URL
-    this.loadHistoryEntry(tab, url);
-  }
-
-  loadHistoryEntry(tab, url) {
-    if (url === 'forge://home') {
-      // Show Home page
-      if (tab.webview) {
-        tab.webview.classList.remove('active');
-        
-        // Mute audio to stop media playback (preserves history unlike about:blank)
-        try {
-          tab.webview.setAudioMuted(true);
-        } catch (e) {
-          // Webview not ready, ignore
-        }
-      }
-      tab.isHome = true;
-      tab.url = 'forge://home';
-      tab.title = 'Home';
-      tab.element.dataset.isHome = 'true';
-      
-      // Update tab icon
-      const iconElement = tab.element.querySelector('.tab-home-icon, .tab-favicon');
-      if (iconElement) {
-        iconElement.classList.remove('tab-favicon');
-        iconElement.classList.add('tab-home-icon');
-        iconElement.src = 'forge-asset://ui-icons/home.svg';
+        this.draggedTab = null;
       }
       
-      // Update tab title
-      tab.element.querySelector('.tab-title').textContent = 'Home';
+      setTimeout(() => {
+        this.isDragging = false;
+      }, 10);
       
-      // Show welcome page
-      this.welcomePage.classList.remove('hidden');
-      this.urlInput.value = '';
-      this.updateSecurityIndicator('');
-    } else {
-      // Show webview with URL
-      if (!tab.webview) {
-        // Create webview if it doesn't exist (for home-created tabs)
-        this.createWebviewForTab(tab, url);
-      } else {
-        tab.isHome = false;
-        tab.element.dataset.isHome = 'false';
-        this.welcomePage.classList.add('hidden');
-        tab.webview.classList.add('active');
-        
-        // Unmute audio when returning to webview
-        try {
-          tab.webview.setAudioMuted(false);
-        } catch (e) {
-          // Ignore
-        }
-        
-        // Load cached favicon immediately if available
-        const cachedFavicon = this.getCachedFavicon(url);
-        if (cachedFavicon) {
-          const iconElement = tab.element.querySelector('.tab-home-icon, .tab-favicon');
-          if (iconElement) {
-            iconElement.classList.remove('tab-home-icon');
-            iconElement.classList.add('tab-favicon');
-            iconElement.src = cachedFavicon;
-          }
-        }
-        
-        // Navigate to the URL
-        // We always want to navigate when the user explicitly enters a URL
-        tab.webview.src = url;
-        
-        tab.url = url;
-        this.urlInput.value = url;
-        this.updateSecurityIndicator(url);
-      }
-    }
-    
-    this.updateNavigationButtons();
-  }
-
-  processUrl(input) {
-    input = input.trim();
-    
-    // Check if it's already a valid URL
-    if (input.match(/^https?:\/\//i)) {
-      return input;
-    }
-    
-    // Check if it looks like a domain
-    if (input.match(/^[\w-]+(\.[\w-]+)+/)) {
-      return `https://${input}`;
-    }
-    
-    // Treat as search query
-    return `https://www.google.com/search?q=${encodeURIComponent(input)}`;
-  }
-
-  goBack() {
-    if (this.activeTabId) {
-      const tab = this.tabs.find(t => t.id === this.activeTabId);
-      if (!tab) return;
-      
-      // If we're on a webview, check if it has internal history first
-      if (tab.webview && !tab.isHome) {
-        try {
-          if (tab.webview.canGoBack()) {
-            tab.webview.goBack();
-            setTimeout(() => this.updateNavigationButtons(), 100);
-            return;
-          }
-        } catch (e) {
-          // Webview not ready, fall through to custom history
-        }
-      }
-      
-      // Use custom history if webview can't go back
-      if (tab.historyIndex > 0) {
-        tab.historyIndex--;
-        const url = tab.history[tab.historyIndex];
-        this.loadHistoryEntry(tab, url);
-      }
-    }
-  }
-
-  goForward() {
-    if (this.activeTabId) {
-      const tab = this.tabs.find(t => t.id === this.activeTabId);
-      if (!tab) return;
-      
-      // If we're on Home but have custom forward history, use it first to show webview
-      if (tab.isHome && tab.historyIndex < tab.history.length - 1) {
-        tab.historyIndex++;
-        const url = tab.history[tab.historyIndex];
-        this.loadHistoryEntry(tab, url);
-        return;
-      }
-      
-      // If we're on a webview, check if it has internal forward history
-      if (tab.webview && !tab.isHome) {
-        try {
-          if (tab.webview.canGoForward()) {
-            tab.webview.goForward();
-            setTimeout(() => this.updateNavigationButtons(), 100);
-            return;
-          }
-        } catch (e) {
-          // Webview not ready, fall through to custom history
-        }
-      }
-      
-      // Use custom history if webview can't go forward
-      if (tab.historyIndex < tab.history.length - 1) {
-        tab.historyIndex++;
-        const url = tab.history[tab.historyIndex];
-        this.loadHistoryEntry(tab, url);
-      }
-    }
-  }
-
-  reload() {
-    if (this.activeTabId) {
-      const tab = this.tabs.find(t => t.id === this.activeTabId);
-      if (tab) {
-        // Don't reload if we're on Home page
-        if (tab.isHome) {
-          return;
-        }
-        if (tab.webview) {
-          tab.webview.reload();
-        }
-      }
-    }
-  }
-
-  goHome() {
-    if (this.activeTabId) {
-      const tab = this.tabs.find(t => t.id === this.activeTabId);
-      if (tab && !tab.isHome) {
-        this.navigateTabTo(tab, 'forge://home');
-      }
-    } else {
-      // Create a new home tab
-      this.createHomeTab();
-    }
-  }
-
-  updateTabTitle(tabId, title) {
-    const tab = this.tabs.find(t => t.id === tabId);
-    if (!tab) return;
-    
-    tab.title = title;
-    const titleElement = tab.element.querySelector('.tab-title');
-    
-    // Check if this site has a custom logo
-    let logoPath = null;
-    let contentText = title;
-    
-    if (tab.url) {
-      try {
-        const domain = new URL(tab.url).hostname;
-        logoPath = this.siteLogos[domain];
-        
-        // If we have a logo, parse out the content description
-        if (logoPath) {
-          // Remove site name suffix (e.g., " - YouTube", " - Google")
-          contentText = title
-            .replace(/ - YouTube$/i, '')
-            .replace(/ - Google$/i, '')
-            .replace(/^YouTube$/i, '') // Just "YouTube" with no content
-            .replace(/^Google$/i, ''); // Just "Google" with no content
-        }
-      } catch (e) {
-        // Invalid URL, use plain title
-      }
-    }
-    
-    // Build the title HTML
-    if (logoPath && contentText.trim()) {
-      // Show logo + content text
-      titleElement.innerHTML = `
-        <img class="tab-title-logo" src="${logoPath}" alt="">
-        <span class="tab-title-text">${this.escapeHtml(contentText)}</span>
-      `;
-    } else if (logoPath) {
-      // Just logo, no content
-      titleElement.innerHTML = `<img class="tab-title-logo" src="${logoPath}" alt="">`;
-    } else {
-      // Plain text
-      titleElement.innerHTML = `<span class="tab-title-text">${this.escapeHtml(title)}</span>`;
-    }
-  }
-  
-  /**
-   * Update the ad counter display in the URL bar
-   * @param {number} count - Number of ads blocked
-   */
-  updateAdCounter(count) {
-    if (this.adCounter && this.adCounterValue) {
-      this.adCounter.classList.remove('hidden'); // Remove initial hidden class
-      if (count > 0 && this.adblockEnabled) {
-        this.adCounterValue.textContent = count;
-        this.adCounter.style.display = 'flex';
-      } else {
-        this.adCounter.style.display = 'none';
-      }
-    }
-  }
-  
-  escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  updateTabFavicon(tabId, faviconUrl) {
-    const tab = this.tabs.find(t => t.id === tabId);
-    if (tab) {
-      // Store favicon on tab object
-      tab.favicon = faviconUrl;
-      
-      const favicon = tab.element.querySelector('.tab-favicon, .tab-home-icon');
-      if (favicon) {
-        // Ensure it has the correct class for regular favicons (remove special icon classes)
-        favicon.classList.remove('tab-home-icon', 'tab-icon-plus');
-        favicon.classList.add('tab-favicon');
-        favicon.src = faviconUrl;
-        favicon.onerror = () => {
-          // Fallback to plus icon if favicon fails to load
-          favicon.classList.add('tab-icon-plus');
-          favicon.src = 'forge-asset://ui-icons/plus.svg';
-        };
-        
-        // Cache the favicon for this URL
-        if (tab.url && faviconUrl) {
-          try {
-            const domain = new URL(tab.url).hostname;
-            this.faviconCache.set(domain, {
-              url: faviconUrl,
-              timestamp: Date.now()
-            });
-            this.saveFaviconCache();
-            
-            // Update any history entries for this URL with the favicon
-            this.updateHistoryFavicon(tab.url, faviconUrl);
-          } catch (e) {
-            // Invalid URL, skip caching
-          }
-        }
-      }
-    }
-  }
-  
-  loadFaviconCache() {
-    try {
-      const cached = localStorage.getItem('forge_favicon_cache');
-      if (cached) {
-        const data = JSON.parse(cached);
-        // Convert array back to Map
-        this.faviconCache = new Map(data);
-        
-        // Clean old entries (older than 7 days)
-        const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-        for (const [domain, entry] of this.faviconCache.entries()) {
-          if (entry.timestamp < weekAgo) {
-            this.faviconCache.delete(domain);
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load favicon cache:', e);
-      this.faviconCache = new Map();
-    }
-  }
-  
-  saveFaviconCache() {
-    try {
-      // Convert Map to array for JSON storage
-      const data = Array.from(this.faviconCache.entries());
-      localStorage.setItem('forge_favicon_cache', JSON.stringify(data));
-    } catch (e) {
-      console.error('Failed to save favicon cache:', e);
-    }
-  }
-  
-  getCachedFavicon(url) {
-    try {
-      const domain = new URL(url).hostname;
-      const cached = this.faviconCache.get(domain);
-      if (cached) {
-        return cached.url;
-      }
-    } catch (e) {
-      // Invalid URL
-    }
-    return null;
-  }
-
-  updateTabLoading(tabId, isLoading) {
-    const tab = this.tabs.find(t => t.id === tabId);
-    if (tab) {
-      if (isLoading) {
-        tab.element.classList.add('loading');
-      } else {
-        tab.element.classList.remove('loading');
-      }
-    }
-  }
-
-  updateNavigationButtons() {
-    if (this.activeTabId) {
-      const tab = this.tabs.find(t => t.id === this.activeTabId);
-      if (tab) {
-        // Check if we can go back (webview internal history OR custom history)
-        let canGoBack = tab.historyIndex > 0;
-        let canGoForward = tab.historyIndex < tab.history.length - 1;
-        
-        if (tab.webview && !tab.isHome) {
-          try {
-            canGoBack = canGoBack || tab.webview.canGoBack();
-            canGoForward = canGoForward || tab.webview.canGoForward();
-          } catch (e) {
-            // Webview not ready, use custom history only
-          }
-        }
-        
-        this.btnBack.disabled = !canGoBack;
-        this.btnForward.disabled = !canGoForward;
-      } else {
-        this.btnBack.disabled = true;
-        this.btnForward.disabled = true;
-      }
-    } else {
-      this.btnBack.disabled = true;
-      this.btnForward.disabled = true;
-    }
-  }
-
-  updateSecurityIndicator(url) {
-    this.securityIndicator.classList.remove('secure', 'insecure');
-    
-    if (url && url.startsWith('https://')) {
-      this.securityIndicator.classList.add('secure');
-    } else if (url && url.startsWith('http://')) {
-      this.securityIndicator.classList.add('insecure');
-    }
-  }
-
-  updateStatus(text) {
-    this.statusText.textContent = text;
+      document.removeEventListener('mousemove', this.handleMouseMove);
+      document.removeEventListener('mouseup', this.handleMouseUp);
+    };
   }
 
   getDragAfterElement(container, x) {
@@ -1225,598 +479,247 @@ class ForgeBrowser {
   }
 
   reorderTabsArray() {
+    const tabElements = [...this.tabsContainer.querySelectorAll('.tab')];
     const newOrder = [];
-    const tabElements = this.tabsContainer.querySelectorAll('.tab');
     
-    tabElements.forEach(tabElement => {
-      const tabId = tabElement.dataset.tabId;
+    tabElements.forEach(tabEl => {
+      const tabId = tabEl.dataset.tabId;
       const tab = this.tabs.find(t => t.id === tabId);
-      if (tab) {
-        newOrder.push(tab);
-      }
+      if (tab) newOrder.push(tab);
     });
     
     this.tabs = newOrder;
   }
 
-  showContextMenu(x, y, tabId) {
-    this.contextMenuTabId = tabId;
-    this.tabContextMenu.classList.remove('hidden');
-    
-    const tab = this.tabs.find(t => t.id === tabId);
-    const tabIndex = this.tabs.findIndex(t => t.id === tabId);
-    
-    // Disable/enable menu items based on context
-    const moveToNewWindowItem = this.tabContextMenu.querySelector('[data-action="move-to-new-window"]');
-    if (moveToNewWindowItem) {
-      if (this.tabs.length <= 1) {
-        moveToNewWindowItem.classList.add('disabled');
-      } else {
-        moveToNewWindowItem.classList.remove('disabled');
-      }
-    }
-    
-    // Update mute menu item text based on current state
-    const muteItem = this.tabContextMenu.querySelector('[data-action="mute"]');
-    if (muteItem && tab) {
-      const isMuted = tab.webview ? tab.webview.isAudioMuted() : false;
-      muteItem.textContent = isMuted ? 'Unmute this Tab' : 'Mute this Tab';
-    }
-    
-    // Disable "Close other Tabs" if only one tab
-    const closeOthersItem = this.tabContextMenu.querySelector('[data-action="close-others"]');
-    if (closeOthersItem) {
-      if (this.tabs.length <= 1) {
-        closeOthersItem.classList.add('disabled');
-      } else {
-        closeOthersItem.classList.remove('disabled');
-      }
-    }
-    
-    // Disable "Close Tabs to the right" if no tabs to the right
-    const closeRightItem = this.tabContextMenu.querySelector('[data-action="close-right"]');
-    if (closeRightItem) {
-      if (tabIndex === -1 || tabIndex >= this.tabs.length - 1) {
-        closeRightItem.classList.add('disabled');
-      } else {
-        closeRightItem.classList.remove('disabled');
-      }
-    }
-    
-    // Position the menu
-    this.tabContextMenu.style.left = `${x}px`;
-    this.tabContextMenu.style.top = `${y}px`;
-    
-    // Ensure menu stays within viewport
-    const rect = this.tabContextMenu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-      this.tabContextMenu.style.left = `${window.innerWidth - rect.width - 10}px`;
-    }
-    if (rect.bottom > window.innerHeight) {
-      this.tabContextMenu.style.top = `${window.innerHeight - rect.height - 10}px`;
-    }
-  }
+  // ==================== Tab Management ====================
 
-  hideContextMenu() {
-    this.tabContextMenu.classList.add('hidden');
-    this.contextMenuTabId = null;
-  }
-
-  /**
-   * Close all popup menus (context menus, main menu, URL suggestions)
-   */
-  closeAllPopups() {
-    this.hideContextMenu();
-    this.hideWebviewContextMenu();
-    this.hideMainMenu();
-    this.hideSuggestions();
-  }
-
-  showWebviewContextMenu(e, webview) {
-    this.contextMenuWebview = webview;
-    this.contextMenuParams = e.params;
+  createTab(url = null) {
+    const tabId = `tab-${++this.tabCounter}`;
     
-    // Enable/disable back/forward based on navigation state
-    const backItem = document.getElementById('ctx-back');
-    const forwardItem = document.getElementById('ctx-forward');
+    const tab = document.createElement('div');
+    tab.className = 'tab';
+    tab.dataset.tabId = tabId;
+    tab.innerHTML = `
+      <img class="tab-favicon tab-icon-plus" src="forge-asset://ui-icons/plus.svg" alt="">
+      <span class="tab-title">New Tab</span>
+      <button class="tab-close" title="Close tab">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+      </button>
+    `;
     
-    if (backItem) {
-      if (webview.canGoBack()) {
-        backItem.classList.remove('disabled');
-      } else {
-        backItem.classList.add('disabled');
-      }
-    }
-    if (forwardItem) {
-      if (webview.canGoForward()) {
-        forwardItem.classList.remove('disabled');
-      } else {
-        forwardItem.classList.add('disabled');
-      }
-    }
+    // Drag handler
+    tab.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || e.target.closest('.tab-close')) return;
+      this.draggedTab = tab;
+      this.isDragging = false;
+      this.dragStartX = e.clientX;
+      document.addEventListener('mousemove', this.handleMouseMove);
+      document.addEventListener('mouseup', this.handleMouseUp);
+    });
     
-    // Show/hide link-specific items
-    const hasLink = e.params.linkURL && e.params.linkURL.length > 0;
-    const copyLinkItem = document.getElementById('ctx-copy-link');
-    const openLinkItem = document.getElementById('ctx-open-link');
-    const linkSeparator = document.getElementById('ctx-link-separator');
-    
-    if (copyLinkItem) copyLinkItem.style.display = hasLink ? 'flex' : 'none';
-    if (openLinkItem) openLinkItem.style.display = hasLink ? 'flex' : 'none';
-    if (linkSeparator) linkSeparator.style.display = hasLink ? 'block' : 'none';
-    
-    // Show the overlay first (captures clicks outside the menu)
-    this.contextMenuOverlay.classList.remove('hidden');
-    
-    // Show the menu
-    this.webviewContextMenu.classList.remove('hidden');
-    
-    // Position at click location
-    this.webviewContextMenu.style.left = `${e.params.x}px`;
-    this.webviewContextMenu.style.top = `${e.params.y}px`;
-    
-    // Ensure menu stays within viewport
-    const rect = this.webviewContextMenu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-      this.webviewContextMenu.style.left = `${window.innerWidth - rect.width - 10}px`;
-    }
-    if (rect.bottom > window.innerHeight) {
-      this.webviewContextMenu.style.top = `${window.innerHeight - rect.height - 10}px`;
-    }
-  }
-
-  hideWebviewContextMenu() {
-    this.webviewContextMenu.classList.add('hidden');
-    this.contextMenuOverlay.classList.add('hidden');
-    this.contextMenuWebview = null;
-    this.contextMenuParams = null;
-  }
-
-  handleWebviewContextMenuAction(action) {
-    const webview = this.contextMenuWebview;
-    const params = this.contextMenuParams;
-    
-    if (!webview) return;
-    
-    switch(action) {
-      case 'back':
-        if (webview.canGoBack()) webview.goBack();
-        break;
-      case 'forward':
-        if (webview.canGoForward()) webview.goForward();
-        break;
-      case 'reload':
-        webview.reload();
-        break;
-      case 'copy-link':
-        if (params && params.linkURL) {
-          navigator.clipboard.writeText(params.linkURL);
-        }
-        break;
-      case 'open-link-new-tab':
-        if (params && params.linkURL) {
-          this.createTab(params.linkURL);
-        }
-        break;
-      case 'copy':
-        webview.copy();
-        break;
-      case 'paste':
-        webview.paste();
-        break;
-      case 'select-all':
-        webview.selectAll();
-        break;
-      case 'view-source':
-        // Open our custom source viewer to avoid Chrome's buggy view-source line wrap
-        this.viewPageSource(webview);
-        break;
-      case 'inspect':
-        webview.openDevTools();
-        break;
-    }
-    
-    this.hideWebviewContextMenu();
-  }
-
-  handleContextMenuAction(action, element) {
-    if (!this.contextMenuTabId) return;
-    
-    // Don't execute action if menu item is disabled
-    if (element && element.classList.contains('disabled')) return;
-    
-    switch(action) {
-      case 'new-tab-right':
-        this.createTabToRight(this.contextMenuTabId);
-        break;
-      case 'move-to-new-window':
-        this.moveTabToNewWindow(this.contextMenuTabId);
-        break;
-      case 'reload':
-        this.reloadTab(this.contextMenuTabId);
-        break;
-      case 'duplicate':
-        this.duplicateTab(this.contextMenuTabId);
-        break;
-      case 'mute':
-        this.toggleTabMute(this.contextMenuTabId);
-        break;
-      case 'close':
-        this.closeTab(this.contextMenuTabId);
-        break;
-      case 'close-others':
-        this.closeOtherTabs(this.contextMenuTabId);
-        break;
-      case 'close-right':
-        this.closeTabsToRight(this.contextMenuTabId);
-        break;
-    }
-  }
-
-  createTabToRight(referenceTabId) {
-    const tabIndex = this.tabs.findIndex(t => t.id === referenceTabId);
-    if (tabIndex === -1) return;
-    
-    // Create new tab
-    const newTabId = this.createTab();
-    
-    // Find the newly created tab (it was appended to the end)
-    const newTab = this.tabs.find(t => t.id === newTabId);
-    if (!newTab) return;
-    
-    // Remove from current position
-    const currentIndex = this.tabs.indexOf(newTab);
-    this.tabs.splice(currentIndex, 1);
-    
-    // Insert after reference tab
-    this.tabs.splice(tabIndex + 1, 0, newTab);
-    
-    // Reorder DOM elements
-    const referenceTab = this.tabs[tabIndex];
-    referenceTab.element.insertAdjacentElement('afterend', newTab.element);
-    
-    this.updateStatus('New tab created');
-  }
-
-  reloadTab(tabId) {
-    const tab = this.tabs.find(t => t.id === tabId);
-    if (tab && tab.webview) {
-      tab.webview.reload();
-      this.updateStatus('Reloading...');
-    }
-  }
-
-  duplicateTab(tabId) {
-    const tab = this.tabs.find(t => t.id === tabId);
-    if (!tab) return;
-    
-    const tabIndex = this.tabs.indexOf(tab);
-    let url = null;
-    
-    // Get current URL from webview
-    if (tab.webview) {
-      try {
-        url = tab.webview.getURL();
-      } catch (e) {
-        url = null;
-      }
-    }
-    
-    // Create new tab with the same URL
-    const newTabId = this.createTab(url);
-    
-    // Find the newly created tab
-    const newTab = this.tabs.find(t => t.id === newTabId);
-    if (!newTab) return;
-    
-    // Remove from current position (end)
-    const currentIndex = this.tabs.indexOf(newTab);
-    this.tabs.splice(currentIndex, 1);
-    
-    // Insert after the duplicated tab
-    this.tabs.splice(tabIndex + 1, 0, newTab);
-    
-    // Reorder DOM elements
-    tab.element.insertAdjacentElement('afterend', newTab.element);
-    
-    this.updateStatus('Tab duplicated');
-  }
-
-  toggleTabMute(tabId) {
-    const tab = this.tabs.find(t => t.id === tabId);
-    if (!tab || !tab.webview) return;
-    
-    // Toggle mute state
-    const isMuted = tab.webview.isAudioMuted();
-    tab.webview.setAudioMuted(!isMuted);
-    tab.isMuted = !isMuted;
-    
-    // Update the audio icon in the tab
-    this.updateTabAudioIcon(tabId);
-    
-    this.updateStatus(tab.isMuted ? 'Tab muted' : 'Tab unmuted');
-  }
-
-  updateTabAudioIcon(tabId) {
-    const tab = this.tabs.find(t => t.id === tabId);
-    if (!tab) return;
-    
-    // Find or create the audio icon element
-    let audioIcon = tab.element.querySelector('.tab-audio-icon');
-    
-    if (tab.isMuted) {
-      // Show mute icon (red)
-      if (!audioIcon) {
-        audioIcon = document.createElement('img');
-        audioIcon.className = 'tab-audio-icon';
-        audioIcon.width = 14;
-        audioIcon.height = 14;
-        // Insert before close button
-        const closeBtn = tab.element.querySelector('.tab-close');
-        if (closeBtn) {
-          closeBtn.insertAdjacentElement('beforebegin', audioIcon);
-        }
-      }
-      audioIcon.src = 'forge-asset://ui-icons/volume-mute.svg';
-      audioIcon.title = 'Tab is muted - click to unmute';
-      audioIcon.className = 'tab-audio-icon muted';
-    } else if (tab.isPlayingAudio) {
-      // Show playing audio icon (orange accent)
-      if (!audioIcon) {
-        audioIcon = document.createElement('img');
-        audioIcon.className = 'tab-audio-icon';
-        audioIcon.width = 14;
-        audioIcon.height = 14;
-        const closeBtn = tab.element.querySelector('.tab-close');
-        if (closeBtn) {
-          closeBtn.insertAdjacentElement('beforebegin', audioIcon);
-        }
-      }
-      audioIcon.src = 'forge-asset://ui-icons/volume-loud.svg';
-      audioIcon.title = 'Tab is playing audio - click to mute';
-      audioIcon.className = 'tab-audio-icon playing';
-    } else {
-      // Remove audio icon if not muted and not playing
-      if (audioIcon) {
-        audioIcon.remove();
-      }
-    }
-    
-    // Make audio icon clickable to toggle mute
-    if (audioIcon && !audioIcon.hasAttribute('data-click-bound')) {
-      audioIcon.setAttribute('data-click-bound', 'true');
-      audioIcon.style.cursor = 'pointer';
-      audioIcon.addEventListener('click', (e) => {
+    // Click handler
+    tab.addEventListener('click', (e) => {
+      if (this.isDragging) {
+        e.preventDefault();
         e.stopPropagation();
-        this.toggleTabMute(tabId);
-      });
-    }
-  }
-
-  closeOtherTabs(tabId) {
-    // Get list of tabs to close (all except the specified tab)
-    const tabsToClose = this.tabs.filter(t => t.id !== tabId).map(t => t.id);
-    
-    // Close them one by one
-    tabsToClose.forEach(id => this.closeTab(id));
-    
-    // Switch to the remaining tab
-    this.switchTab(tabId);
-    
-    this.updateStatus('Other tabs closed');
-  }
-
-  closeTabsToRight(tabId) {
-    const tabIndex = this.tabs.findIndex(t => t.id === tabId);
-    if (tabIndex === -1) return;
-    
-    // Get tabs to the right
-    const tabsToClose = this.tabs.slice(tabIndex + 1).map(t => t.id);
-    
-    // Close them
-    tabsToClose.forEach(id => this.closeTab(id));
-    
-    this.updateStatus('Tabs to the right closed');
-  }
-
-  async moveTabToNewWindow(tabId) {
-    const tab = this.tabs.find(t => t.id === tabId);
-    if (!tab) return;
-    
-    // Get the current URL from the webview (if it exists)
-    let url = null;
-    if (tab.webview) {
-      try {
-        url = tab.webview.getURL();
-      } catch (e) {
-        url = null;
+        return;
       }
-    }
+      if (!e.target.closest('.tab-close')) {
+        this.switchTab(tabId);
+      }
+    });
     
-    // Close the tab in current window
-    this.closeTab(tabId);
+    // Context menu
+    tab.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.showContextMenu(e.clientX, e.clientY, tabId);
+    });
     
-    // Request main process to create new window with the URL
-    await window.forgeAPI.createNewWindow(url);
+    // Close button
+    tab.querySelector('.tab-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.closeTab(tabId);
+    });
     
-    this.updateStatus('Tab moved to new window');
-  }
-
-  createWebviewForTab(tab, url) {
-    const self = this; // Preserve reference to Browser instance
+    this.tabsContainer.appendChild(tab);
     
     // Create webview
     const webview = document.createElement('webview');
-    webview.id = tab.id;
+    webview.id = tabId;
     webview.setAttribute('allowpopups', '');
     webview.setAttribute('partition', 'persist:main');
     webview.setAttribute('webpreferences', 'contextIsolation=yes');
     
-    // Webview event handlers
+    this.setupWebviewEvents(webview, tabId);
+    
+    this.browserContent.appendChild(webview);
+    
+    // Store tab info
+    this.tabs.push({
+      id: tabId,
+      element: tab,
+      webview: webview,
+      title: 'New Tab',
+      url: url || '',
+      history: [],
+      historyIndex: -1,
+      isPlayingAudio: false,
+      isMuted: false,
+      adsBlocked: 0
+    });
+    
+    this.switchTab(tabId);
+    
+    if (url) {
+      // Use setAttribute after webview is in DOM
+      // Use setTimeout to ensure DOM is fully updated
+      setTimeout(() => {
+        console.log('[Forge] Setting webview src to:', url);
+        webview.setAttribute('src', url);
+      }, 50);
+    }
+    
+    return tabId;
+  }
+
+  setupWebviewEvents(webview, tabId) {
+    const self = this;
+    
     webview.addEventListener('did-start-loading', () => {
-      try { self.updateStatus('Loading...'); } catch(e) {}
-      try { self.updateTabLoading(tab.id, true); } catch(e) {}
+      self.updateStatus('Loading...');
+      self.updateTabLoading(tabId, true);
     });
     
     webview.addEventListener('did-stop-loading', () => {
-      try { self.updateStatus('Ready'); } catch(e) {}
-      try { self.updateTabLoading(tab.id, false); } catch(e) {}
+      self.updateStatus('Ready');
+      self.updateTabLoading(tabId, false);
     });
     
     webview.addEventListener('page-title-updated', (e) => {
-      if (self.updateTabTitle) self.updateTabTitle(tab.id, e.title);
+      self.updateTabTitle(tabId, e.title);
     });
     
     webview.addEventListener('page-favicon-updated', (e) => {
       if (e.favicons && e.favicons.length > 0) {
-        if (self.updateTabFavicon) self.updateTabFavicon(tab.id, e.favicons[0]);
+        self.updateTabFavicon(tabId, e.favicons[0]);
       }
     });
     
     webview.addEventListener('did-navigate', (e) => {
-      if (tab.id === self.activeTabId) {
-        self.urlInput.value = e.url;
-        if (self.updateSecurityIndicator) self.updateSecurityIndicator(e.url);
-      }
-      // Reset ad counter for this tab on navigation
-      tab.adsBlocked = 0;
-      if (tab.id === self.activeTabId) {
-        self.updateAdCounter(0);
-      }
-      // Add to browsing history (exclude home and internal pages)
-      if (!e.url.startsWith('forge://') && !e.url.startsWith('about:')) {
-        const title = tab.title || 'New Tab';
-        const favicon = tab.favicon || null;
-        if (self.addToHistory) self.addToHistory(e.url, title, favicon);
+      const tab = self.tabs.find(t => t.id === tabId);
+      if (tab) {
+        tab.url = e.url; // Store the URL on the tab object
       }
       
-      // Inject cosmetic CSS to hide ad elements
-      if (self.injectCosmeticCSS) self.injectCosmeticCSS(webview, e.url);
-      // Inject ad-blocking scripts (YouTube, etc.)
-      if (self.injectAdBlockScript) self.injectAdBlockScript(webview, e.url);
+      if (tabId === self.activeTabId) {
+        self.urlInput.value = e.url;
+        self.updateSecurityIndicator(e.url);
+        self.updateNavigationButtons();
+      }
+      
+      if (!isInternalUrl(e.url)) {
+        const title = tab ? tab.title : 'New Tab';
+        const favicon = tab ? tab.favicon : null;
+        self.addToHistory(e.url, title, favicon);
+      }
+      
+      // Inject scripts
+      console.log('[Password] did-navigate event for:', e.url);
+      self.injectCosmeticCSS(webview, e.url);
+      self.injectAdBlockScript(webview, e.url);
+      self.injectPasswordAutofill(webview, e.url);
     });
     
-    // Inject scripts as early as possible
     webview.addEventListener('dom-ready', () => {
       try {
-        const currentUrl = webview.getURL();
-        if (currentUrl) {
-          if (self.injectAdBlockScript) self.injectAdBlockScript(webview, currentUrl);
-          if (self.injectCosmeticCSS) self.injectCosmeticCSS(webview, currentUrl);
+        const url = webview.getURL();
+        if (url) {
+          console.log('[Password] dom-ready event for:', url);
+          self.injectAdBlockScript(webview, url);
+          self.injectCosmeticCSS(webview, url);
+          self.injectPasswordAutofill(webview, url);
         }
       } catch (e) {
-        console.error('[Webview] Error in dom-ready handler:', e);
+        console.error('[Webview] Error in dom-ready:', e);
       }
     });
     
     webview.addEventListener('did-navigate-in-page', (e) => {
-      if (tab.id === self.activeTabId && e.isMainFrame) {
+      const tab = self.tabs.find(t => t.id === tabId);
+      if (tabId === self.activeTabId && e.isMainFrame) {
         self.urlInput.value = e.url;
-        if (self.updateSecurityIndicator) self.updateSecurityIndicator(e.url);
+        self.updateSecurityIndicator(e.url);
+        self.updateNavigationButtons();
       }
-      // Add to browsing history for in-page navigation too
-      if (e.isMainFrame && !e.url.startsWith('forge://') && !e.url.startsWith('about:')) {
-        const title = tab.title || 'New Tab';
-        const favicon = tab.favicon || null;
-        if (self.addToHistory) self.addToHistory(e.url, title, favicon);
-        
-        // Re-inject for SPA navigations
-        if (self.injectCosmeticCSS) self.injectCosmeticCSS(webview, e.url);
-        if (self.injectAdBlockScript) self.injectAdBlockScript(webview, e.url);
+      
+      if (e.isMainFrame && !isInternalUrl(e.url)) {
+        const title = tab ? tab.title : 'New Tab';
+        const favicon = tab ? tab.favicon : null;
+        self.addToHistory(e.url, title, favicon);
+        self.injectCosmeticCSS(webview, e.url);
+        self.injectAdBlockScript(webview, e.url);
       }
     });
     
     webview.addEventListener('new-window', (e) => {
-      if (self.createTab) self.createTab(e.url);
+      self.createTab(e.url);
     });
     
-    // Context menu for webview
     webview.addEventListener('context-menu', (e) => {
       self.showWebviewContextMenu(e, webview);
     });
     
-    // Close all popups when webview gets focus (user clicks on it)
     webview.addEventListener('focus', () => {
       self.closeAllPopups();
     });
     
-    // Listen for ad-blocked messages from injected script
+    // Console message handling for ad blocking and passwords
     webview.addEventListener('console-message', (e) => {
       if (e.message && e.message.startsWith('[FORGE_AD_BLOCKED]')) {
         const count = parseInt(e.message.split(' ')[1], 10);
-        if (!isNaN(count)) {
+        const tab = self.tabs.find(t => t.id === tabId);
+        if (tab && !isNaN(count)) {
           tab.adsBlocked = count;
-          if (tab.id === self.activeTabId) {
+          if (tabId === self.activeTabId) {
             self.updateAdCounter(count);
           }
         }
       }
     });
     
-    // Audio playing detection - use IPC to check audio state from main process
+    // Audio state checking
     const checkAudioState = async () => {
-      const tabObj = self.tabs.find(t => t.id === tab.id);
-      if (!tabObj || !tabObj.webview) return;
+      const tab = self.tabs.find(t => t.id === tabId);
+      if (!tab || !tab.webview) return;
       
       try {
         const webContentsId = webview.getWebContentsId ? webview.getWebContentsId() : null;
         if (webContentsId) {
-          const isCurrentlyAudible = await window.forgeAPI.isWebContentsAudible(webContentsId);
-          const wasPlaying = tabObj.isPlayingAudio;
-          
-          if (isCurrentlyAudible !== wasPlaying) {
-            tabObj.isPlayingAudio = isCurrentlyAudible;
-            self.updateTabAudioIcon(tab.id);
+          const isAudible = await window.forgeAPI.isWebContentsAudible(webContentsId);
+          if (isAudible !== tab.isPlayingAudio) {
+            tab.isPlayingAudio = isAudible;
+            self.updateTabAudioIcon(tabId);
           }
         }
-      } catch (e) {
-        // Webview might not be ready yet
-      }
+      } catch (e) {}
     };
     
-    // Start audio checking after webview is ready  
     webview.addEventListener('dom-ready', () => {
-      const audioCheckInterval = setInterval(checkAudioState, 500);
-      const tabObj = self.tabs.find(t => t.id === tab.id);
-      if (tabObj) {
-        tabObj.audioCheckInterval = audioCheckInterval;
-      }
+      const interval = setInterval(checkAudioState, 500);
+      const tab = self.tabs.find(t => t.id === tabId);
+      if (tab) tab.audioCheckInterval = interval;
       checkAudioState();
     }, { once: true });
-
-    this.browserContent.appendChild(webview);
-    tab.webview = webview;
-    
-    // Update tab properties
-    tab.isHome = false;
-    tab.element.dataset.isHome = 'false';
-    
-    // Update tab icon - load from cache if available
-    const iconElement = tab.element.querySelector('.tab-home-icon, .tab-favicon');
-    if (iconElement) {
-      iconElement.classList.remove('tab-home-icon');
-      iconElement.classList.add('tab-favicon');
-      
-      // Try to load cached favicon immediately
-      const cachedFavicon = this.getCachedFavicon(url);
-      iconElement.src = cachedFavicon || '';
-    }
-    
-    // Hide welcome page and show webview
-    this.welcomePage.classList.add('hidden');
-    webview.classList.add('active');
-    
-    // Load the URL
-    webview.src = url;
-    tab.url = url;
-    this.urlInput.value = url;
-    this.updateSecurityIndicator(url);
   }
 
   createHomeTab() {
+    console.log('[Forge] createHomeTab called');
+    console.log('[Forge] tabsContainer:', this.tabsContainer);
+    
     const tabId = `tab-${++this.tabCounter}`;
     
-    // Create tab element
     const tab = document.createElement('div');
     tab.className = 'tab active';
     tab.dataset.tabId = tabId;
@@ -1831,22 +734,19 @@ class ForgeBrowser {
       </button>
     `;
     
-    // Mouse-based drag handler (replaces native drag API for cursor control)
+    console.log('[Forge] Created tab element:', tab);
+    
+    // Drag handler
     tab.addEventListener('mousedown', (e) => {
-      // Only start drag on left click and not on close button
       if (e.button !== 0 || e.target.closest('.tab-close')) return;
-      
       this.draggedTab = tab;
       this.isDragging = false;
       this.dragStartX = e.clientX;
-      
       document.addEventListener('mousemove', this.handleMouseMove);
       document.addEventListener('mouseup', this.handleMouseUp);
     });
     
-    // Tab click handler
     tab.addEventListener('click', (e) => {
-      // Don't switch tabs if we just finished dragging
       if (this.isDragging) {
         e.preventDefault();
         e.stopPropagation();
@@ -1857,21 +757,20 @@ class ForgeBrowser {
       }
     });
     
-    // Tab right-click handler
     tab.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       this.showContextMenu(e.clientX, e.clientY, tabId);
     });
     
-    // Close button handler
     tab.querySelector('.tab-close').addEventListener('click', (e) => {
       e.stopPropagation();
       this.closeTab(tabId);
     });
     
+    console.log('[Forge] Appending tab to container...');
     this.tabsContainer.appendChild(tab);
+    console.log('[Forge] Tab appended. Container children:', this.tabsContainer.children.length);
     
-    // Store tab info (no webview for home tab, uses welcome page)
     this.tabs.push({
       id: tabId,
       element: tab,
@@ -1884,11 +783,466 @@ class ForgeBrowser {
     });
     
     this.activeTabId = tabId;
-    this.updateStatus('Ready');
+    this.showWelcomePage();
   }
 
-  // ==================== Main Menu Methods ====================
-  
+  closeTab(tabId, skipAnimation = false) {
+    const tabIndex = this.tabs.findIndex(t => t.id === tabId);
+    if (tabIndex === -1) return;
+    
+    const tab = this.tabs[tabIndex];
+    
+    if (tab.audioCheckInterval) {
+      clearInterval(tab.audioCheckInterval);
+    }
+    
+    if (!skipAnimation) {
+      tab.element.classList.add('closing');
+    }
+    
+    const removeTab = () => {
+      tab.element.remove();
+      if (tab.webview) {
+        tab.webview.remove();
+      }
+      
+      this.tabs.splice(tabIndex, 1);
+      
+      if (tabId === this.activeTabId) {
+        if (this.tabs.length > 0) {
+          const newActiveIndex = Math.min(tabIndex, this.tabs.length - 1);
+          this.switchTab(this.tabs[newActiveIndex].id);
+        } else {
+          this.activeTabId = null;
+          this.createHomeTab();
+        }
+      }
+    };
+    
+    if (skipAnimation) {
+      removeTab();
+    } else {
+      setTimeout(removeTab, 300);
+    }
+  }
+
+  switchTab(tabId) {
+    this.tabs.forEach(tab => {
+      tab.element.classList.remove('active');
+      if (tab.webview) {
+        tab.webview.classList.remove('active');
+      }
+    });
+    
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (tab) {
+      tab.element.classList.add('active');
+      this.activeTabId = tabId;
+      
+      this.updateAdCounter(tab.adsBlocked || 0);
+      
+      if (tab.isHome) {
+        this.showWelcomePage();
+      } else {
+        this.welcomePage.classList.add('hidden');
+        if (tab.webview) {
+          tab.webview.classList.add('active');
+          try {
+            const url = tab.webview.getURL();
+            this.urlInput.value = url || '';
+            this.updateSecurityIndicator(url);
+          } catch (e) {
+            this.urlInput.value = '';
+          }
+          this.updateNavigationButtons();
+        }
+      }
+    }
+  }
+
+  showWelcomePage() {
+    this.welcomePage.classList.remove('hidden');
+    this.urlInput.value = '';
+    this.updateSecurityIndicator('');
+    this.btnBack.disabled = true;
+    this.btnForward.disabled = true;
+  }
+
+  // ==================== Navigation ====================
+
+  navigate(input) {
+    const url = this.processUrl(input);
+    
+    if (this.activeTabId) {
+      const tab = this.tabs.find(t => t.id === this.activeTabId);
+      if (tab) {
+        if (tab.isHome) {
+          // Convert home tab to regular tab
+          this.createWebviewForHomeTab(tab, url);
+        } else if (tab.webview) {
+          tab.webview.src = url;
+        }
+      }
+    } else {
+      this.createTab(url);
+    }
+  }
+
+  createWebviewForHomeTab(tab, url) {
+    const webview = document.createElement('webview');
+    webview.id = tab.id;
+    webview.setAttribute('allowpopups', '');
+    webview.setAttribute('partition', 'persist:main');
+    webview.setAttribute('webpreferences', 'contextIsolation=yes');
+    
+    this.setupWebviewEvents(webview, tab.id);
+    
+    this.browserContent.appendChild(webview);
+    
+    tab.webview = webview;
+    tab.isHome = false;
+    tab.element.dataset.isHome = 'false';
+    
+    const iconElement = tab.element.querySelector('.tab-home-icon, .tab-favicon');
+    if (iconElement) {
+      iconElement.classList.remove('tab-home-icon');
+      iconElement.classList.add('tab-favicon');
+      iconElement.src = '';
+    }
+    
+    this.welcomePage.classList.add('hidden');
+    webview.classList.add('active');
+    
+    webview.src = url;
+    tab.url = url;
+    this.urlInput.value = url;
+    this.updateSecurityIndicator(url);
+  }
+
+  processUrl(input) {
+    input = input.trim();
+    
+    if (input.match(/^https?:\/\//i)) {
+      return input;
+    }
+    
+    if (input.match(/^[\w-]+\.[\w-]+/)) {
+      return 'https://' + input;
+    }
+    
+    return `https://www.google.com/search?q=${encodeURIComponent(input)}`;
+  }
+
+  goBack() {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.webview) {
+      tab.webview.goBack();
+    }
+  }
+
+  goForward() {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.webview) {
+      tab.webview.goForward();
+    }
+  }
+
+  reload() {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.webview) {
+      tab.webview.reload();
+    }
+  }
+
+  goHome() {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab) {
+      if (tab.webview) {
+        tab.webview.classList.remove('active');
+      }
+      tab.isHome = true;
+      tab.element.dataset.isHome = 'true';
+      
+      const iconElement = tab.element.querySelector('.tab-favicon, .tab-home-icon');
+      if (iconElement) {
+        iconElement.classList.remove('tab-favicon');
+        iconElement.classList.add('tab-home-icon');
+        iconElement.src = 'forge-asset://ui-icons/home.svg';
+      }
+      
+      tab.element.querySelector('.tab-title').textContent = 'Home';
+      this.showWelcomePage();
+    }
+  }
+
+  updateNavigationButtons() {
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.webview) {
+      this.btnBack.disabled = !tab.webview.canGoBack();
+      this.btnForward.disabled = !tab.webview.canGoForward();
+    } else {
+      this.btnBack.disabled = true;
+      this.btnForward.disabled = true;
+    }
+  }
+
+  // ==================== UI Updates ====================
+
+  updateSecurityIndicator(url) {
+    if (!this.securityIndicator) return;
+    
+    if (!url || url.startsWith('forge://')) {
+      this.securityIndicator.className = 'security-indicator';
+      this.securityIndicator.innerHTML = '';
+    } else if (url.startsWith('https://')) {
+      this.securityIndicator.className = 'security-indicator secure';
+      this.securityIndicator.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="currentColor"/></svg>';
+    } else {
+      this.securityIndicator.className = 'security-indicator insecure';
+      this.securityIndicator.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h2v-2h-2v2zm0-4h2V7h-2v6z" fill="currentColor"/></svg>';
+    }
+  }
+
+  updateStatus(text) {
+    if (this.statusText) {
+      this.statusText.textContent = text;
+    }
+  }
+
+  // ==================== Favicon Cache ====================
+
+  loadFaviconCache() {
+    try {
+      const saved = localStorage.getItem('forge-favicon-cache');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        this.faviconCache = new Map(Object.entries(parsed));
+      }
+    } catch (e) {
+      this.faviconCache = new Map();
+    }
+  }
+
+  saveFaviconCache() {
+    try {
+      const obj = Object.fromEntries(this.faviconCache);
+      localStorage.setItem('forge-favicon-cache', JSON.stringify(obj));
+    } catch (e) {}
+  }
+
+  getCachedFavicon(url) {
+    try {
+      const domain = getDomain(url);
+      const cached = this.faviconCache.get(domain);
+      if (cached && Date.now() - cached.timestamp < 7 * 24 * 60 * 60 * 1000) {
+        return cached.url;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // ==================== Context Menus ====================
+
+  showContextMenu(x, y, tabId) {
+    this.contextMenuTabId = tabId;
+    this.tabContextMenu.style.left = x + 'px';
+    this.tabContextMenu.style.top = y + 'px';
+    this.tabContextMenu.classList.remove('hidden');
+    
+    // Add click handlers for menu items
+    this.tabContextMenu.querySelectorAll('.context-menu-item').forEach(item => {
+      item.onclick = () => {
+        const action = item.dataset.action;
+        this.handleContextMenuAction(action);
+        this.hideContextMenu();
+      };
+    });
+  }
+
+  hideContextMenu() {
+    this.tabContextMenu.classList.add('hidden');
+    this.contextMenuTabId = null;
+  }
+
+  handleContextMenuAction(action) {
+    const tabId = this.contextMenuTabId;
+    if (!tabId) return;
+    
+    switch (action) {
+      case 'new-tab-right':
+        this.createTab();
+        break;
+      case 'reload':
+        this.reloadTab(tabId);
+        break;
+      case 'duplicate':
+        this.duplicateTab(tabId);
+        break;
+      case 'mute':
+        this.toggleTabMute(tabId);
+        break;
+      case 'close-other':
+        this.closeOtherTabs(tabId);
+        break;
+      case 'close-right':
+        this.closeTabsToRight(tabId);
+        break;
+      case 'close':
+        this.closeTab(tabId);
+        break;
+    }
+  }
+
+  reloadTab(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (tab && tab.webview) {
+      tab.webview.reload();
+    }
+  }
+
+  duplicateTab(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (tab && tab.webview) {
+      const url = tab.webview.getURL();
+      this.createTab(url);
+    }
+  }
+
+  toggleTabMute(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (tab && tab.webview) {
+      tab.isMuted = !tab.isMuted;
+      tab.webview.setAudioMuted(tab.isMuted);
+      this.updateTabAudioIcon(tabId);
+    }
+  }
+
+  closeOtherTabs(tabId) {
+    const tabsToClose = this.tabs.filter(t => t.id !== tabId).map(t => t.id);
+    tabsToClose.forEach(id => this.closeTab(id, true));
+  }
+
+  closeTabsToRight(tabId) {
+    const tabIndex = this.tabs.findIndex(t => t.id === tabId);
+    if (tabIndex !== -1) {
+      const tabsToClose = this.tabs.slice(tabIndex + 1).map(t => t.id);
+      tabsToClose.forEach(id => this.closeTab(id, true));
+    }
+  }
+
+  showWebviewContextMenu(e, webview) {
+    this.contextMenuWebview = webview;
+    this.contextMenuParams = e.params;
+    
+    this.webviewContextMenu.style.left = e.params.x + 'px';
+    this.webviewContextMenu.style.top = e.params.y + 'px';
+    this.webviewContextMenu.classList.remove('hidden');
+    this.contextMenuOverlay.classList.remove('hidden');
+    
+    // Update menu items based on context
+    const hasSelection = e.params.selectionText && e.params.selectionText.length > 0;
+    const hasLink = e.params.linkURL && e.params.linkURL.length > 0;
+    const hasImage = e.params.hasImageContents;
+    
+    this.webviewContextMenu.querySelectorAll('.context-menu-item').forEach(item => {
+      const action = item.dataset.action;
+      if (action === 'copy' || action === 'search') {
+        item.style.display = hasSelection ? 'flex' : 'none';
+      } else if (action === 'open-link' || action === 'open-link-new-tab' || action === 'copy-link') {
+        item.style.display = hasLink ? 'flex' : 'none';
+      } else if (action === 'save-image' || action === 'copy-image') {
+        item.style.display = hasImage ? 'flex' : 'none';
+      }
+      
+      item.onclick = () => {
+        this.handleWebviewContextMenuAction(action);
+        this.hideWebviewContextMenu();
+      };
+    });
+  }
+
+  hideWebviewContextMenu() {
+    this.webviewContextMenu.classList.add('hidden');
+    this.contextMenuOverlay.classList.add('hidden');
+    this.contextMenuWebview = null;
+    this.contextMenuParams = null;
+  }
+
+  handleWebviewContextMenuAction(action) {
+    const webview = this.contextMenuWebview;
+    const params = this.contextMenuParams;
+    if (!webview || !params) return;
+    
+    switch (action) {
+      case 'back':
+        webview.goBack();
+        break;
+      case 'forward':
+        webview.goForward();
+        break;
+      case 'reload':
+        webview.reload();
+        break;
+      case 'copy':
+        webview.copy();
+        break;
+      case 'search':
+        if (params.selectionText) {
+          this.createTab(`https://www.google.com/search?q=${encodeURIComponent(params.selectionText)}`);
+        }
+        break;
+      case 'open-link':
+        if (params.linkURL) {
+          webview.src = params.linkURL;
+        }
+        break;
+      case 'open-link-new-tab':
+        if (params.linkURL) {
+          this.createTab(params.linkURL);
+        }
+        break;
+      case 'copy-link':
+        if (params.linkURL) {
+          navigator.clipboard.writeText(params.linkURL);
+        }
+        break;
+      case 'save-image':
+        if (params.srcURL) {
+          window.forgeAPI.downloadFile(params.srcURL);
+        }
+        break;
+      case 'copy-image':
+        if (params.srcURL) {
+          navigator.clipboard.writeText(params.srcURL);
+        }
+        break;
+      case 'inspect':
+        webview.inspectElement(params.x, params.y);
+        break;
+    }
+  }
+
+  closeAllPopups() {
+    this.hideMainMenu();
+    this.hideContextMenu();
+    this.hideWebviewContextMenu();
+    this.hideHistoryPanel();
+    this.hideAboutPanel();
+    this.hideFavoritesPanel();
+    this.hideFavoritesDialog();
+    this.hidePasswordAnvilPanel();
+    this.hidePasswordModal();
+    this.hideChromeImportPanel();
+    this.hideAISettingsPanel();
+    this.hideSuggestions();
+  }
+
+  // ==================== Main Menu ====================
+
   toggleMainMenu() {
     if (this.mainMenu.classList.contains('hidden')) {
       this.showMainMenu();
@@ -1896,50 +1250,62 @@ class ForgeBrowser {
       this.hideMainMenu();
     }
   }
-  
+
   showMainMenu() {
-    const btnRect = this.btnMenu.getBoundingClientRect();
-    
-    // Position menu below the button, aligned to the right
     this.mainMenu.classList.remove('hidden');
-    this.mainMenu.style.top = `${btnRect.bottom + 8}px`;
-    this.mainMenu.style.right = `${window.innerWidth - btnRect.right}px`;
-    this.mainMenu.style.left = 'auto';
+    this.updateAdBlockerStats();
   }
-  
-  hideMainMenu() {
-    this.mainMenu.classList.add('hidden');
+
+  hideMainMenu(instant = false) {
+    if (instant || !this.mainMenu) {
+      this.mainMenu?.classList.add('hidden');
+      this.mainMenu?.classList.remove('closing');
+      return;
+    }
+    
+    // Add closing class for reverse animation
+    this.mainMenu.classList.add('closing');
+    
+    // Wait for animation to complete before hiding
+    setTimeout(() => {
+      this.mainMenu?.classList.add('hidden');
+      this.mainMenu?.classList.remove('closing');
+    }, 280); // Total animation time including delays
   }
-  
+
   handleMainMenuAction(action) {
-    switch(action) {
+    switch (action) {
+      case 'new-tab':
+        this.createTab();
+        break;
       case 'history':
         this.showHistoryPanel();
         break;
-      case 'devtools':
-        this.openDevTools();
-        break;
-      case 'google-account':
-        this.showGoogleAccountPanel();
-        break;
-      case 'import-chrome':
-        this.showChromeImportPanel();
+      case 'password-anvil':
+        this.showPasswordAnvil();
         break;
       case 'ai-assistant':
         this.showAISettingsPanel();
         break;
-      case 'favorites':
-        this.toggleFavoritesEnabled();
-        return; // Don't hide menu for toggle
-      case 'adblock':
-        this.toggleAdBlocker();
-        return; // Don't hide menu for toggle
+      case 'import-chrome':
+        this.showChromeImportPanel();
+        this.renderChromeImportPanel();
+        break;
+      case 'devtools':
+        this.openDevTools();
+        break;
       case 'about':
         this.showAboutPanel();
         break;
+      case 'favorites':
+        this.toggleFavoritesEnabled();
+        break;
+      case 'adblock':
+        this.toggleAdBlocker();
+        break;
     }
   }
-  
+
   openDevTools() {
     const tab = this.tabs.find(t => t.id === this.activeTabId);
     if (tab && tab.webview) {
@@ -1947,1530 +1313,86 @@ class ForgeBrowser {
     }
   }
 
-  /**
-   * View page source - opens the native view-source viewer
-   * @param {HTMLWebViewElement} webview - The webview to get source from
-   */
-  viewPageSource(webview) {
-    try {
-      const url = webview.getURL();
-      // Use the native view-source protocol
-      this.createTab('view-source:' + url);
-    } catch (e) {
-      console.error('[ViewSource] Failed to view page source:', e);
-    }
-  }
+  // ==================== Panels ====================
 
-  // ==================== Google Account Methods ====================
-  
-  async updateGoogleAuthStatus() {
-    try {
-      const status = await window.forgeAPI.googleAuth.getStatus();
-      if (status.isSignedIn && status.userInfo) {
-        this.googleAccountText.textContent = status.userInfo.name || status.userInfo.email;
-      } else {
-        this.googleAccountText.textContent = 'Sign in with Google';
-      }
-    } catch (e) {
-      console.error('Failed to get Google auth status:', e);
-    }
-  }
-  
-  showGoogleAccountPanel() {
-    this.googleAccountPanel.classList.remove('hidden');
-    this.renderGoogleAccountPanel();
-  }
-  
-  hideGoogleAccountPanel() {
-    this.googleAccountPanel.classList.add('hidden');
-  }
-  
-  async renderGoogleAccountPanel() {
-    const status = await window.forgeAPI.googleAuth.getStatus();
-    
-    if (status.isSignedIn && status.userInfo) {
-      // Signed in view
-      this.googleAccountContent.innerHTML = `
-        <div class="google-signed-in">
-          <img class="google-user-avatar" src="${status.userInfo.picture || 'forge-asset://ui-icons/globe.svg'}" alt="Avatar">
-          <div class="google-user-name">${this.escapeHtml(status.userInfo.name || 'User')}</div>
-          <div class="google-user-email">${this.escapeHtml(status.userInfo.email || '')}</div>
-          <button class="google-sign-out-btn" id="btn-google-sign-out">Sign out</button>
-        </div>
-      `;
-      
-      document.getElementById('btn-google-sign-out').addEventListener('click', () => this.googleSignOut());
-    } else {
-      // Signed out view
-      let credentialsSection = '';
-      
-      if (!status.hasCredentials) {
-        credentialsSection = `
-          <div class="google-setup-section">
-            <h3>Setup Required</h3>
-            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
-              To use Google Sign-In, you need to create OAuth credentials in Google Cloud Console.
-            </p>
-            <div class="google-credentials-form">
-              <input type="text" id="google-client-id" placeholder="Client ID">
-              <input type="password" id="google-client-secret" placeholder="Client Secret">
-              <button class="google-save-btn" id="btn-save-credentials">Save Credentials</button>
-            </div>
-            <p class="google-setup-note">
-              Get credentials from <a href="#" id="link-google-console">Google Cloud Console</a><br>
-              Create an OAuth 2.0 Client ID (Desktop app type)
-            </p>
-          </div>
-        `;
-      }
-      
-      this.googleAccountContent.innerHTML = `
-        <div class="google-signed-out">
-          <p>Sign in with your Google account to stay logged into Google services across browser sessions.</p>
-          <button class="google-sign-in-btn" id="btn-google-sign-in" ${!status.hasCredentials ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
-            <svg viewBox="0 0 24 24">
-              <path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-              <path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-            </svg>
-            Sign in with Google
-          </button>
-          ${credentialsSection}
-        </div>
-      `;
-      
-      if (status.hasCredentials) {
-        document.getElementById('btn-google-sign-in').addEventListener('click', () => this.googleSignIn());
-      }
-      
-      if (!status.hasCredentials) {
-        document.getElementById('btn-save-credentials').addEventListener('click', () => this.saveGoogleCredentials());
-        document.getElementById('link-google-console').addEventListener('click', (e) => {
-          e.preventDefault();
-          this.createTab('https://console.cloud.google.com/apis/credentials');
-          this.hideGoogleAccountPanel();
-        });
-      }
-    }
-  }
-  
-  async googleSignIn() {
-    const btn = document.getElementById('btn-google-sign-in');
-    btn.disabled = true;
-    btn.textContent = 'Signing in...';
-    
-    try {
-      const result = await window.forgeAPI.googleAuth.signIn();
-      if (result.success) {
-        this.updateGoogleAuthStatus();
-        this.renderGoogleAccountPanel();
-      } else {
-        alert('Sign in failed: ' + result.error);
-      }
-    } catch (e) {
-      alert('Sign in failed: ' + e.message);
-    }
-    
-    btn.disabled = false;
-    btn.innerHTML = `
-      <svg viewBox="0 0 24 24">
-        <path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-        <path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-        <path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-        <path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-      </svg>
-      Sign in with Google
-    `;
-  }
-  
-  async googleSignOut() {
-    const btn = document.getElementById('btn-google-sign-out');
-    btn.disabled = true;
-    btn.textContent = 'Signing out...';
-    
-    try {
-      await window.forgeAPI.googleAuth.signOut();
-      this.updateGoogleAuthStatus();
-      this.renderGoogleAccountPanel();
-    } catch (e) {
-      alert('Sign out failed: ' + e.message);
-    }
-  }
-  
-  async saveGoogleCredentials() {
-    const clientId = document.getElementById('google-client-id').value.trim();
-    const clientSecret = document.getElementById('google-client-secret').value.trim();
-    
-    if (!clientId || !clientSecret) {
-      alert('Please enter both Client ID and Client Secret');
-      return;
-    }
-    
-    try {
-      const result = await window.forgeAPI.googleAuth.setCredentials(clientId, clientSecret);
-      if (result.success) {
-        this.renderGoogleAccountPanel();
-      } else {
-        alert('Failed to save credentials: ' + result.error);
-      }
-    } catch (e) {
-      alert('Failed to save credentials: ' + e.message);
-    }
-  }
-
-  // ==================== Chrome Import Methods ====================
-  
   showChromeImportPanel() {
-    this.chromeImportPanel.classList.remove('hidden');
-    this.renderChromeImportPanel();
-  }
-  
-  hideChromeImportPanel() {
-    this.chromeImportPanel.classList.add('hidden');
-  }
-  
-  async renderChromeImportPanel() {
-    this.chromeImportContent.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading...</div>';
-    
-    try {
-      const result = await window.forgeAPI.chromeImport.getProfiles();
-      
-      if (!result.success) {
-        this.chromeImportContent.innerHTML = `
-          <div class="chrome-not-found">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 8v4M12 16h.01"/>
-            </svg>
-            <h3>Chrome Not Found</h3>
-            <p>${result.error || 'Chrome user data could not be located on this computer.'}</p>
-          </div>
-        `;
-        return;
-      }
-      
-      if (result.profiles.length === 0) {
-        this.chromeImportContent.innerHTML = `
-          <div class="chrome-not-found">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 8v4M12 16h.01"/>
-            </svg>
-            <h3>No Profiles Found</h3>
-            <p>No Chrome profiles were found on this computer.</p>
-          </div>
-        `;
-        return;
-      }
-      
-      // Build profile options
-      const profileOptions = result.profiles.map(p => {
-        const label = p.email ? `${p.name} (${p.email})` : p.name;
-        return `<option value="${p.id}">${this.escapeHtml(label)}</option>`;
-      }).join('');
-      
-      this.chromeImportContent.innerHTML = `
-        <p class="chrome-import-intro">
-          Import your bookmarks, browsing history, and saved login information from your local Chrome installation.
-        </p>
-        
-        <div class="chrome-profile-selector">
-          <label>Chrome Profile</label>
-          <select id="chrome-profile-select">
-            ${profileOptions}
-          </select>
-        </div>
-        
-        <div class="chrome-import-options" id="chrome-import-options">
-          <label class="chrome-import-option">
-            <input type="checkbox" id="import-bookmarks" checked>
-            <div class="chrome-import-option-info">
-              <div class="chrome-import-option-title">Bookmarks</div>
-              <div class="chrome-import-option-desc">Import your saved bookmarks</div>
-            </div>
-            <span class="chrome-import-option-count" id="count-bookmarks">-</span>
-          </label>
-          
-          <label class="chrome-import-option">
-            <input type="checkbox" id="import-history" checked>
-            <div class="chrome-import-option-info">
-              <div class="chrome-import-option-title">Browsing History</div>
-              <div class="chrome-import-option-desc">Import recent browsing history</div>
-            </div>
-            <span class="chrome-import-option-count" id="count-history">-</span>
-          </label>
-          
-          <label class="chrome-import-option">
-            <input type="checkbox" id="import-logins">
-            <div class="chrome-import-option-info">
-              <div class="chrome-import-option-title">Saved Logins</div>
-              <div class="chrome-import-option-desc">Import saved usernames (passwords are encrypted)</div>
-            </div>
-            <span class="chrome-import-option-count" id="count-logins">-</span>
-          </label>
-        </div>
-        
-        <button class="chrome-import-btn" id="btn-start-import">Import Selected Data</button>
-        
-        <div class="chrome-import-progress hidden" id="chrome-import-progress">
-          <div class="chrome-import-progress-bar">
-            <div class="chrome-import-progress-fill" id="chrome-progress-fill"></div>
-          </div>
-          <div class="chrome-import-progress-text" id="chrome-progress-text">Importing...</div>
-        </div>
-        
-        <div id="chrome-import-results" class="chrome-import-results hidden"></div>
-      `;
-      
-      // Bind events
-      document.getElementById('chrome-profile-select').addEventListener('change', (e) => {
-        this.loadChromeProfileSummary(e.target.value);
-      });
-      
-      document.getElementById('btn-start-import').addEventListener('click', () => this.startChromeImport());
-      
-      // Load initial profile summary
-      this.loadChromeProfileSummary(result.profiles[0].id);
-      
-    } catch (e) {
-      this.chromeImportContent.innerHTML = `
-        <div class="chrome-import-error">
-          Error: ${e.message}
-        </div>
-      `;
-    }
-  }
-  
-  async loadChromeProfileSummary(profileId) {
-    try {
-      const summary = await window.forgeAPI.chromeImport.getImportSummary(profileId);
-      
-      if (summary.success) {
-        document.getElementById('count-bookmarks').textContent = 
-          summary.summary.bookmarks.available ? `${summary.summary.bookmarks.count} items` : 'N/A';
-        document.getElementById('count-history').textContent = 
-          summary.summary.history.available ? 'Available' : 'N/A';
-        document.getElementById('count-logins').textContent = 
-          summary.summary.logins.available ? 'Available' : 'N/A';
-        
-        // Disable unavailable options
-        document.getElementById('import-bookmarks').disabled = !summary.summary.bookmarks.available;
-        document.getElementById('import-history').disabled = !summary.summary.history.available;
-        document.getElementById('import-logins').disabled = !summary.summary.logins.available;
-      }
-    } catch (e) {
-      console.error('Failed to load profile summary:', e);
-    }
-  }
-  
-  async startChromeImport() {
-    const profileId = document.getElementById('chrome-profile-select').value;
-    const importBookmarks = document.getElementById('import-bookmarks').checked;
-    const importHistory = document.getElementById('import-history').checked;
-    const importLogins = document.getElementById('import-logins').checked;
-    
-    if (!importBookmarks && !importHistory && !importLogins) {
-      alert('Please select at least one item to import');
-      return;
-    }
-    
-    const btn = document.getElementById('btn-start-import');
-    const progress = document.getElementById('chrome-import-progress');
-    const progressFill = document.getElementById('chrome-progress-fill');
-    const progressText = document.getElementById('chrome-progress-text');
-    const resultsDiv = document.getElementById('chrome-import-results');
-    
-    btn.disabled = true;
-    btn.textContent = 'Importing...';
-    progress.classList.remove('hidden');
-    resultsDiv.classList.add('hidden');
-    
-    const results = {
-      bookmarks: { imported: 0, error: null },
-      history: { imported: 0, error: null },
-      logins: { imported: 0, error: null }
-    };
-    
-    let step = 0;
-    const totalSteps = (importBookmarks ? 1 : 0) + (importHistory ? 1 : 0) + (importLogins ? 1 : 0);
-    
-    try {
-      // Import bookmarks
-      if (importBookmarks) {
-        progressText.textContent = 'Importing bookmarks...';
-        progressFill.style.width = `${(step / totalSteps) * 100}%`;
-        
-        const result = await window.forgeAPI.chromeImport.importBookmarks(profileId);
-        if (result.success) {
-          results.bookmarks.imported = result.count;
-          // Store bookmarks (you could save to localStorage or a file)
-          this.importedBookmarks = result.bookmarks;
-        } else {
-          results.bookmarks.error = result.error;
-        }
-        step++;
-      }
-      
-      // Import history
-      if (importHistory) {
-        progressText.textContent = 'Importing history...';
-        progressFill.style.width = `${(step / totalSteps) * 100}%`;
-        
-        const result = await window.forgeAPI.chromeImport.importHistory(profileId, 5000);
-        if (result.success) {
-          results.history.imported = result.count;
-          // Merge with existing history
-          this.mergeImportedHistory(result.history);
-        } else {
-          results.history.error = result.error;
-        }
-        step++;
-      }
-      
-      // Import logins
-      if (importLogins) {
-        progressText.textContent = 'Importing saved logins...';
-        progressFill.style.width = `${(step / totalSteps) * 100}%`;
-        
-        const result = await window.forgeAPI.chromeImport.getSavedLogins(profileId);
-        if (result.success) {
-          results.logins.imported = result.count;
-          this.importedLogins = result.logins;
-        } else {
-          results.logins.error = result.error;
-        }
-        step++;
-      }
-      
-      // Complete
-      progressFill.style.width = '100%';
-      progressText.textContent = 'Import complete!';
-      
-      // Show results
-      let resultsHtml = '';
-      if (importBookmarks) {
-        resultsHtml += `
-          <div class="chrome-import-result-item">
-            <span class="chrome-import-result-label">Bookmarks</span>
-            <span class="chrome-import-result-value">${results.bookmarks.error ? 'Error: ' + results.bookmarks.error : results.bookmarks.imported + ' imported'}</span>
-          </div>
-        `;
-      }
-      if (importHistory) {
-        resultsHtml += `
-          <div class="chrome-import-result-item">
-            <span class="chrome-import-result-label">History</span>
-            <span class="chrome-import-result-value">${results.history.error ? 'Error: ' + results.history.error : results.history.imported + ' imported'}</span>
-          </div>
-        `;
-      }
-      if (importLogins) {
-        resultsHtml += `
-          <div class="chrome-import-result-item">
-            <span class="chrome-import-result-label">Saved Logins</span>
-            <span class="chrome-import-result-value">${results.logins.error ? 'Error: ' + results.logins.error : results.logins.imported + ' imported'}</span>
-          </div>
-        `;
-      }
-      
-      resultsDiv.innerHTML = resultsHtml;
-      resultsDiv.classList.remove('hidden');
-      
-    } catch (e) {
-      progressText.textContent = 'Import failed: ' + e.message;
-    }
-    
-    btn.disabled = false;
-    btn.textContent = 'Import Selected Data';
-  }
-  
-  mergeImportedHistory(importedHistory) {
-    // Convert imported history to our format and merge
-    for (const item of importedHistory) {
-      // Check if this URL already exists
-      const existing = this.browsingHistory.findIndex(h => h.url === item.url);
-      
-      if (existing === -1) {
-        // Add new entry
-        this.browsingHistory.push({
-          url: item.url,
-          title: item.title,
-          timestamp: item.lastVisit || Date.now(),
-          visitCount: item.visitCount || 1,
-          imported: true
-        });
-      } else {
-        // Update visit count if imported has more
-        if (item.visitCount > (this.browsingHistory[existing].visitCount || 1)) {
-          this.browsingHistory[existing].visitCount = item.visitCount;
-        }
-      }
-    }
-    
-    // Sort by timestamp (newest first)
-    this.browsingHistory.sort((a, b) => b.timestamp - a.timestamp);
-    
-    // Save
-    this.saveBrowsingHistory();
+    this.chromeImportPanel?.classList.remove('hidden');
   }
 
-  // ==================== About Panel Methods ====================
-  
+  hideChromeImportPanel() {
+    this.chromeImportPanel?.classList.add('hidden');
+  }
+
+  async renderChromeImportPanel() {
+    if (!this.chromeImportContent) return;
+    this.chromeImportContent.innerHTML = '<div class="loading">Loading...</div>';
+    // TODO: Implement Chrome import
+  }
+
   async showAboutPanel() {
-    // Update version from app info
-    try {
+    if (this.aboutPanel) {
+      this.aboutPanel.classList.remove('hidden');
       const appInfo = await window.forgeAPI.getAppInfo();
-      this.aboutVersion.textContent = `Version ${appInfo.version}`;
-    } catch (e) {
-      console.error('Failed to get app info:', e);
+      if (this.aboutVersion) {
+        this.aboutVersion.textContent = `v${appInfo.version}`;
+      }
     }
-    
-    this.updateStatusElement.textContent = '';
-    this.updateStatusElement.className = 'about-update-status';
-    this.aboutPanel.classList.remove('hidden');
   }
-  
+
   hideAboutPanel() {
-    this.aboutPanel.classList.add('hidden');
+    this.aboutPanel?.classList.add('hidden');
   }
-  
+
+  // ==================== Updates ====================
+
   initUpdateListener() {
-    // Listen for update status events from main process
     window.forgeAPI.updates.onUpdateStatus((data) => {
       this.handleUpdateStatus(data);
     });
   }
-  
+
   handleUpdateStatus(data) {
-    const { status, version, percent, error } = data;
+    if (!this.updateStatusElement) return;
     
-    switch (status) {
-      case 'checking-for-update':
-        this.updateStatusElement.textContent = 'Checking for updates...';
-        this.updateStatusElement.className = 'about-update-status checking';
+    switch (data.status) {
+      case 'checking':
+        this.updateStatusElement.innerHTML = '<span class="update-checking">Checking for updates...</span>';
         break;
-        
-      case 'update-available':
-        this.updateStatusElement.innerHTML = `
-          <span>Version ${version} is available!</span>
-          <button id="download-update-btn" class="about-update-download-btn">Download Update</button>
-        `;
-        this.updateStatusElement.className = 'about-update-status available';
-        document.getElementById('download-update-btn')?.addEventListener('click', async () => {
-          await window.forgeAPI.updates.downloadUpdate();
-        });
+      case 'available':
+        this.updateStatusElement.innerHTML = `<span class="update-available">Update available: v${data.version}</span>`;
         break;
-        
-      case 'update-not-available':
-        this.updateStatusElement.textContent = 'You are running the latest version.';
-        this.updateStatusElement.className = 'about-update-status success';
+      case 'not-available':
+        this.updateStatusElement.innerHTML = '<span class="update-current">You have the latest version</span>';
         break;
-        
-      case 'download-progress':
-        this.updateStatusElement.textContent = `Downloading update: ${percent.toFixed(1)}%`;
-        this.updateStatusElement.className = 'about-update-status downloading';
+      case 'downloading':
+        this.updateStatusElement.innerHTML = `<span class="update-downloading">Downloading... ${Math.round(data.percent || 0)}%</span>`;
         break;
-        
-      case 'update-downloaded':
-        this.updateStatusElement.innerHTML = `
-          <span>Update ${version} ready to install!</span>
-          <button id="install-update-btn" class="about-update-install-btn">Restart & Install</button>
-        `;
-        this.updateStatusElement.className = 'about-update-status ready';
-        document.getElementById('install-update-btn')?.addEventListener('click', () => {
-          window.forgeAPI.updates.installUpdate();
-        });
+      case 'downloaded':
+        this.updateStatusElement.innerHTML = '<span class="update-ready">Update ready - restart to install</span>';
         break;
-        
-      case 'update-error':
-        this.showUpdateError(error || 'Unknown error');
+      case 'error':
+        this.updateStatusElement.innerHTML = `<span class="update-error">Update error: ${data.error}</span>`;
         break;
     }
   }
-  
-  showUpdateError(errorMessage) {
-    this.lastUpdateError = errorMessage;
-    this.updateStatusElement.innerHTML = `
-      <span>Update check failed</span>
-      <button id="copy-error-btn" class="about-update-copy-btn">Copy Error</button>
-    `;
-    this.updateStatusElement.className = 'about-update-status error';
-    document.getElementById('copy-error-btn')?.addEventListener('click', () => {
-      this.copyUpdateErrorToClipboard();
-    });
-  }
-  
-  async copyUpdateErrorToClipboard() {
-    try {
-      await navigator.clipboard.writeText(this.lastUpdateError);
-      const btn = document.getElementById('copy-error-btn');
-      if (btn) {
-        btn.textContent = 'Copied!';
-        setTimeout(() => {
-          btn.textContent = 'Copy Error';
-        }, 2000);
-      }
-    } catch (e) {
-      console.error('Failed to copy error:', e);
-    }
-  }
-  
+
   async checkForUpdates() {
-    this.updateStatus.textContent = 'Checking for updates...';
-    this.updateStatus.className = 'about-update-status checking';
-    
-    try {
-      const result = await window.forgeAPI.updates.checkForUpdates();
-      if (!result.success) {
-        this.showUpdateError(result.error || 'Unknown error');
-      }
-      // Status will be updated via the update-status event
-    } catch (e) {
-      this.showUpdateError(e.message || 'Could not check for updates');
-    }
-  }
-
-  // ==================== AI Assistant Methods ====================
-  
-  async initAIProviders() {
-    try {
-      const providers = await window.forgeAPI.ai.getProviders();
-      this.renderAIToolbarButtons(providers);
-    } catch (e) {
-      console.error('Failed to initialize AI providers:', e);
-    }
-  }
-  
-  renderAIToolbarButtons(providers) {
-    this.aiButtons.innerHTML = '';
-    
-    // Map provider IDs to SVG filenames
-    const iconMap = {
-      chatgpt: 'gpt',
-      claude: 'claude',
-      gemini: 'gemini',
-      grok: 'grok'
-    };
-    
-    for (const [id, provider] of Object.entries(providers)) {
-      if (provider.enabled) {
-        const btn = document.createElement('button');
-        btn.className = 'ai-agent-btn';
-        btn.title = provider.name;
-        btn.dataset.provider = id;
-        btn.dataset.url = provider.url;
-        const iconName = iconMap[id] || id;
-        btn.innerHTML = `<img class="ai-toolbar-icon" src="forge-asset://ui-icons/${iconName}.svg" alt="${provider.name}" width="18" height="18">`;
-        btn.addEventListener('click', () => this.openAIWebview(id, provider.name, provider.url));
-        this.aiButtons.appendChild(btn);
-      }
-    }
-  }
-  
-  showAISettingsPanel() {
-    this.aiSettingsPanel.classList.remove('hidden');
-    this.renderAISettingsPanel();
-  }
-  
-  hideAISettingsPanel() {
-    this.aiSettingsPanel.classList.add('hidden');
-  }
-  
-  async renderAISettingsPanel() {
-    try {
-      const providers = await window.forgeAPI.ai.getProviders();
-      
-      // Map provider IDs to SVG filenames
-      const iconMap = {
-        chatgpt: 'gpt',
-        claude: 'claude',
-        gemini: 'gemini',
-        grok: 'grok'
-      };
-      
-      let html = '<p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">Enable AI assistants to access them directly from your browser toolbar.</p>';
-      html += '<div class="ai-provider-list">';
-      
-      for (const [id, provider] of Object.entries(providers)) {
-        const statusText = provider.enabled ? 'Enabled' : 'Disabled';
-        const statusClass = provider.enabled ? 'enabled' : '';
-        const iconName = iconMap[id] || id;
-        
-        html += `
-          <div class="ai-provider-item" data-provider="${id}">
-            <span class="ai-provider-icon ai-icon-${id}">
-              <img src="forge-asset://ui-icons/${iconName}.svg" alt="${provider.name}" width="20" height="20">
-            </span>
-            <div class="ai-provider-info">
-              <div class="ai-provider-name">${provider.name}</div>
-              <div class="ai-provider-status ${statusClass}">${statusText}</div>
-            </div>
-            <div class="ai-provider-toggle ${provider.enabled ? 'enabled' : ''}" data-provider="${id}"></div>
-          </div>
-        `;
-      }
-      
-      html += '</div>';
-      this.aiSettingsContent.innerHTML = html;
-      
-      // Bind toggle events
-      this.aiSettingsContent.querySelectorAll('.ai-provider-toggle').forEach(toggle => {
-        toggle.addEventListener('click', () => this.handleAIProviderToggle(toggle));
-      });
-    } catch (e) {
-      this.aiSettingsContent.innerHTML = `<p style="color: #f44336;">Error: ${e.message}</p>`;
-    }
-  }
-  
-  async handleAIProviderToggle(toggle) {
-    const providerId = toggle.dataset.provider;
-    const isEnabled = toggle.classList.contains('enabled');
-    
-    // Toggle the provider
-    const result = await window.forgeAPI.ai.toggleProvider(providerId, !isEnabled);
-    
-    if (result.success) {
-      this.renderAISettingsPanel();
-      this.initAIProviders(); // Refresh toolbar buttons
-    } else {
-      alert('Failed to toggle provider: ' + result.error);
-    }
-  }
-  
-  openAIWebview(providerId, providerName, url) {
-    this.currentAIProvider = providerId;
-    this.aiWebviewName.textContent = providerName;
-    
-    // Map provider IDs to SVG filenames
-    const iconMap = {
-      chatgpt: 'gpt',
-      claude: 'claude',
-      gemini: 'gemini',
-      grok: 'grok'
-    };
-    const iconName = iconMap[providerId] || providerId;
-    
-    // Set the icon
-    this.aiWebviewIcon.className = 'ai-webview-icon';
-    this.aiWebviewIcon.innerHTML = `<img src="forge-asset://ui-icons/${iconName}.svg" alt="${providerName}" width="16" height="16">`;
-    
-    // Remove existing webview if any
-    if (this.aiWebview) {
-      this.aiWebview.remove();
-    }
-    
-    // Create new webview
-    this.aiWebview = document.createElement('webview');
-    this.aiWebview.setAttribute('src', url);
-    this.aiWebview.setAttribute('allowpopups', 'true');
-    this.aiWebview.setAttribute('partition', 'persist:ai-assistant');
-    this.aiWebview.setAttribute('webpreferences', 'contextIsolation=yes');
-    
-    // Style the webview to fill the container
-    this.aiWebview.style.width = '100%';
-    this.aiWebview.style.height = '100%';
-    this.aiWebview.style.display = 'flex';
-    
-    this.aiWebviewContainer.appendChild(this.aiWebview);
-    
-    // Show panel and adjust layout
-    this.aiWebviewPanel.classList.remove('hidden');
-    document.body.classList.add('ai-panel-open');
-  }
-  
-  hideAIWebviewPanel() {
-    this.aiWebviewPanel.classList.add('hidden');
-    document.body.classList.remove('ai-panel-open');
-    
-    // Clean up webview
-    if (this.aiWebview) {
-      this.aiWebview.remove();
-      this.aiWebview = null;
-    }
-    this.currentAIProvider = null;
-  }
-
-  // ==================== History Methods ====================
-  
-  loadBrowsingHistory() {
-    try {
-      const saved = localStorage.getItem('forge-browsing-history');
-      if (saved) {
-        this.browsingHistory = JSON.parse(saved);
-        console.log(`Loaded ${this.browsingHistory.length} history entries`);
-      } else {
-        this.browsingHistory = [];
-        console.log('No saved history found, starting fresh');
-      }
-    } catch (e) {
-      console.error('Failed to load browsing history:', e);
-      this.browsingHistory = [];
-    }
-  }
-  
-  saveBrowsingHistory() {
-    try {
-      // Keep only the last 1000 entries
-      if (this.browsingHistory.length > 1000) {
-        this.browsingHistory = this.browsingHistory.slice(-1000);
-      }
-      localStorage.setItem('forge-browsing-history', JSON.stringify(this.browsingHistory));
-    } catch (e) {
-      console.error('Failed to save browsing history:', e);
-    }
-  }
-  
-  addToHistory(url, title, favicon) {
-    console.log('Adding to history:', url, title);
-    
-    // Don't add duplicates if the last entry is the same URL
-    const lastEntry = this.browsingHistory[this.browsingHistory.length - 1];
-    if (lastEntry && lastEntry.url === url) {
-      // Update title/favicon if they've changed
-      lastEntry.title = title || lastEntry.title;
-      lastEntry.favicon = favicon || lastEntry.favicon;
-      this.saveBrowsingHistory();
-      return;
-    }
-    
-    this.browsingHistory.push({
-      url: url,
-      title: title || url,
-      favicon: favicon || null,
-      timestamp: Date.now()
-    });
-    
-    this.saveBrowsingHistory();
-    console.log('History now has', this.browsingHistory.length, 'entries');
-  }
-  
-  showHistoryPanel() {
-    this.historyPanel.classList.remove('hidden');
-    this.historySearch.value = '';
-    this.renderHistoryList();
-    this.historySearch.focus();
-  }
-  
-  hideHistoryPanel() {
-    this.historyPanel.classList.add('hidden');
-  }
-  
-  filterHistory() {
-    this.renderHistoryList(this.historySearch.value.toLowerCase());
-  }
-  
-  renderHistoryList(filter = '') {
-    // Get filtered and sorted history (newest first)
-    let items = [...this.browsingHistory].reverse();
-    
-    if (filter) {
-      items = items.filter(item => 
-        item.url.toLowerCase().includes(filter) || 
-        (item.title && item.title.toLowerCase().includes(filter))
-      );
-    }
-    
-    // Group by date
-    const groups = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    items.forEach(item => {
-      const date = new Date(item.timestamp);
-      date.setHours(0, 0, 0, 0);
-      
-      let groupKey;
-      if (date.getTime() === today.getTime()) {
-        groupKey = 'Today';
-      } else if (date.getTime() === yesterday.getTime()) {
-        groupKey = 'Yesterday';
-      } else {
-        groupKey = date.toLocaleDateString('en-US', { 
-          weekday: 'long', 
-          month: 'long', 
-          day: 'numeric',
-          year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
-        });
-      }
-      
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-      groups[groupKey].push(item);
-    });
-    
-    // Render
-    if (items.length === 0) {
-      this.historyList.innerHTML = `
-        <div class="panel-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="9"/>
-            <path d="M12 7v5l3 3"/>
-          </svg>
-          <div class="panel-empty-text">${filter ? 'No matching history' : 'No browsing history yet'}</div>
-        </div>
-      `;
-      return;
-    }
-    
-    let html = '';
-    for (const [groupName, groupItems] of Object.entries(groups)) {
-      html += `<div class="history-date-group">${groupName}</div>`;
-      
-      for (const item of groupItems) {
-        const time = new Date(item.timestamp).toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit'
-        });
-        
-        // Try to get favicon: from item, from cache, or fallback to globe
-        let favicon = item.favicon;
-        if (!favicon) {
-          try {
-            const domain = new URL(item.url).hostname;
-            const cached = this.faviconCache.get(domain);
-            if (cached) {
-              favicon = cached.url;
-            }
-          } catch (e) {
-            // Invalid URL
-          }
-        }
-        favicon = favicon || 'forge-asset://ui-icons/globe.svg';
-        
-        const title = this.escapeHtml(item.title || item.url);
-        const url = this.escapeHtml(item.url);
-        
-        html += `
-          <div class="history-item" data-url="${url}">
-            <img class="history-item-favicon" src="${favicon}" onerror="this.src='forge-asset://ui-icons/globe.svg'">
-            <div class="history-item-content">
-              <div class="history-item-title">${title}</div>
-              <div class="history-item-url">${url}</div>
-            </div>
-            <span class="history-item-time">${time}</span>
-            <button class="history-item-delete" data-url="${url}" title="Remove from history">
-              <svg width="14" height="14" viewBox="0 0 14 14">
-                <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5"/>
-              </svg>
-            </button>
-          </div>
-        `;
-      }
-    }
-    
-    this.historyList.innerHTML = html;
-    
-    // Add click handlers
-    this.historyList.querySelectorAll('.history-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        if (e.target.closest('.history-item-delete')) {
-          e.stopPropagation();
-          const url = e.target.closest('.history-item-delete').dataset.url;
-          this.removeFromHistory(url);
-        } else {
-          const url = item.dataset.url;
-          this.createTab(url);
-          this.hideHistoryPanel();
-        }
-      });
-    });
-  }
-  
-  escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-  
-  removeFromHistory(url) {
-    // Remove all entries with this URL
-    this.browsingHistory = this.browsingHistory.filter(item => item.url !== url);
-    this.saveBrowsingHistory();
-    this.renderHistoryList(this.historySearch.value.toLowerCase());
-  }
-  
-  updateHistoryFavicon(url, faviconUrl) {
-    // Update all history entries matching this URL with the favicon
-    let updated = false;
-    for (const item of this.browsingHistory) {
-      if (item.url === url && item.favicon !== faviconUrl) {
-        item.favicon = faviconUrl;
-        updated = true;
-      }
-    }
-    if (updated) {
-      this.saveBrowsingHistory();
-    }
-  }
-  
-  clearHistory() {
-    if (confirm('Are you sure you want to clear all browsing history?')) {
-      this.browsingHistory = [];
-      this.saveBrowsingHistory();
-      this.renderHistoryList();
-    }
-  }
-
-  // ==================== Favorites Methods ====================
-  
-  async initFavorites() {
-    try {
-      const data = await window.forgeAPI.favorites.get();
-      this.favoritesEnabled = data.enabled;
-      this.favorites = data.favorites;
-      this.updateFavoritesUI();
-    } catch (e) {
-      console.error('Failed to initialize favorites:', e);
-    }
-  }
-  
-  updateFavoritesUI() {
-    // Update toggle in menu
-    if (this.favoritesEnabled) {
-      this.favoritesToggle.classList.add('active');
-      this.btnFavorites.style.display = '';
-    } else {
-      this.favoritesToggle.classList.remove('active');
-      this.btnFavorites.style.display = 'none';
-      this.hideFavoritesPanel();
-    }
-  }
-  
-  async toggleFavoritesEnabled() {
-    try {
-      this.favoritesEnabled = !this.favoritesEnabled;
-      await window.forgeAPI.favorites.setEnabled(this.favoritesEnabled);
-      this.updateFavoritesUI();
-    } catch (e) {
-      console.error('Failed to toggle favorites:', e);
-    }
-  }
-  
-  toggleFavoritesPanel() {
-    if (this.favoritesPanel.classList.contains('hidden')) {
-      this.showFavoritesPanel();
-    } else {
-      this.hideFavoritesPanel();
-    }
-  }
-  
-  showFavoritesPanel() {
-    this.favoritesPanel.classList.remove('hidden');
-    this.renderFavoritesSlots();
-  }
-  
-  hideFavoritesPanel() {
-    this.favoritesPanel.classList.add('hidden');
-  }
-  
-  resizeFavoriteSlots() {
-    // Calculate slot size to make them square based on available height
-    const viewportHeight = window.innerHeight;
-    const topOffset = 82; // titlebar + navbar
-    const bottomOffset = 24; // statusbar
-    const availableHeight = viewportHeight - topOffset - bottomOffset;
-    const slotSize = Math.floor(availableHeight * 0.06); // ~6% of content area height
-    
-    // Apply size to all slots
-    const slots = this.favoritesSlots.querySelectorAll('.favorite-slot');
-    slots.forEach(slot => {
-      slot.style.width = slotSize + 'px';
-      slot.style.height = slotSize + 'px';
-      slot.style.flexShrink = '0';
-    });
-  }
-  
-  renderFavoritesSlots() {
-    this.favoritesSlots.innerHTML = '';
-    
-    for (let i = 0; i < 5; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'favorite-slot' + (this.favorites[i] ? '' : ' empty');
-      slot.dataset.slot = i;
-      
-      if (this.favorites[i]) {
-        const fav = this.favorites[i];
-        slot.innerHTML = `
-          <img class="favorite-bg" src="${this.escapeHtml(fav.favicon)}" alt="" onerror="this.src='forge-asset://ui-icons/globe.svg'">
-          <div class="favorite-actions">
-            <button class="favorite-action-btn edit" title="Edit" data-slot="${i}">
-              <img src="../../assets/ui-icons/customize.svg" width="20" height="20" alt="Edit">
-            </button>
-            <button class="favorite-action-btn delete" title="Remove" data-slot="${i}">
-              <img src="../../assets/ui-icons/delete.svg" width="20" height="20" alt="Delete">
-            </button>
-          </div>
-        `;
-        
-        // Click to navigate
-        slot.addEventListener('click', (e) => {
-          if (!e.target.closest('.favorite-action-btn')) {
-            this.createTab(fav.url);
-            this.hideFavoritesPanel();
-          }
-        });
-        
-        // Edit button
-        slot.querySelector('.favorite-action-btn.edit').addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.showFavoritesDialog(i, fav);
-        });
-        
-        // Delete button
-        slot.querySelector('.favorite-action-btn.delete').addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.removeFavorite(i);
-        });
-      } else {
-        slot.innerHTML = `
-          <div class="favorite-slot-add">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </div>
-        `;
-        
-        slot.addEventListener('click', () => {
-          this.showFavoritesDialog(i, null);
-        });
-      }
-      
-      this.favoritesSlots.appendChild(slot);
-    }
-    
-    // Resize slots after DOM update
-    requestAnimationFrame(() => this.resizeFavoriteSlots());
-  }
-  
-  showFavoritesDialog(slotIndex, existingFavorite) {
-    this.editingFavoriteSlot = slotIndex;
-    this.favoritesDialogTitle.textContent = existingFavorite ? 'Edit Favorite' : 'Add Favorite';
-    this.favoriteUrlInput.value = existingFavorite ? existingFavorite.url : '';
-    this.favoritesEditDialog.classList.remove('hidden');
-    this.favoriteUrlInput.focus();
-  }
-  
-  hideFavoritesDialog() {
-    this.favoritesEditDialog.classList.add('hidden');
-    this.editingFavoriteSlot = null;
-    this.favoriteUrlInput.value = '';
-  }
-  
-  async saveFavorite() {
-    const url = this.favoriteUrlInput.value.trim();
-    
-    if (!url) {
-      this.favoriteUrlInput.focus();
-      return;
-    }
-    
-    try {
-      const result = await window.forgeAPI.favorites.set(this.editingFavoriteSlot, url, null);
-      if (result.success) {
-        this.favorites[this.editingFavoriteSlot] = result.favorite;
-        this.hideFavoritesDialog();
-        this.renderFavoritesSlots();
-      } else {
-        alert(result.error || 'Failed to save favorite');
-      }
-    } catch (e) {
-      console.error('Failed to save favorite:', e);
-      alert('Failed to save favorite');
-    }
-  }
-  
-  async removeFavorite(slotIndex) {
-    try {
-      const result = await window.forgeAPI.favorites.remove(slotIndex);
-      if (result.success) {
-        this.favorites[slotIndex] = null;
-        this.renderFavoritesSlots();
-      }
-    } catch (e) {
-      console.error('Failed to remove favorite:', e);
-    }
-  }
-
-  // ==================== Ad Blocker Methods ====================
-  
-  async initAdBlocker() {
-    try {
-      const status = await window.forgeAPI.adBlocker.getStatus();
-      this.adblockEnabled = status.enabled;
-      this.adblockBlockedCount = status.stats.blocked || 0;
-      this.updateAdBlockerUI();
-      
-      // Update stats periodically
-      setInterval(() => this.updateAdBlockerStats(), 5000);
-    } catch (e) {
-      console.error('Failed to initialize ad blocker:', e);
-    }
-  }
-  
-  updateAdBlockerUI() {
-    if (this.adblockEnabled) {
-      this.adblockToggle.classList.add('enabled');
-      this.adblockToggle.classList.remove('inactive');
-    } else {
-      this.adblockToggle.classList.remove('enabled');
-      this.adblockToggle.classList.add('inactive');
-    }
-    this.updateAdBlockerStats();
-  }
-  
-  async updateAdBlockerStats() {
-    try {
-      const stats = await window.forgeAPI.adBlocker.getStats();
-      this.adblockBlockedCount = stats.blocked || 0;
-      
-      if (this.adblockBlockedCount > 0) {
-        this.adblockStats.textContent = this.formatBlockCount(this.adblockBlockedCount);
-        this.adblockStats.style.display = '';
-      } else {
-        this.adblockStats.style.display = 'none';
-      }
-    } catch (e) {
-      // Silently fail on stats update
-    }
-  }
-  
-  formatBlockCount(count) {
-    if (count >= 1000000) {
-      return (count / 1000000).toFixed(1) + 'M';
-    } else if (count >= 1000) {
-      return (count / 1000).toFixed(1) + 'K';
-    }
-    return count.toString();
-  }
-  
-  async toggleAdBlocker() {
-    try {
-      this.adblockEnabled = !this.adblockEnabled;
-      await window.forgeAPI.adBlocker.setEnabled(this.adblockEnabled);
-      this.updateAdBlockerUI();
-    } catch (e) {
-      console.error('Failed to toggle ad blocker:', e);
-      // Revert UI on error
-      this.adblockEnabled = !this.adblockEnabled;
-      this.updateAdBlockerUI();
-    }
-  }
-  
-  // ==================== Cosmetic Filtering Methods ====================
-  
-  /**
-   * Inject cosmetic CSS into a webview to hide ad elements
-   * @param {HTMLWebViewElement} webview - The webview to inject CSS into
-   * @param {string} url - The URL of the page
-   */
-  async injectCosmeticCSS(webview, url) {
-    // Only inject if ad blocker is enabled
-    if (!this.adblockEnabled) {
-      return;
-    }
-    
-    // Skip internal pages
-    if (url.startsWith('forge://') || url.startsWith('about:') || url.startsWith('chrome://')) {
-      return;
-    }
-    
-    try {
-      // Get CSS selectors for this URL from main process
-      const result = await window.forgeAPI.cosmeticFilter.getCSS(url);
-      
-      if (result && result.css && result.selectorCount > 0) {
-        // Inject CSS to hide ad elements
-        await webview.insertCSS(result.css);
-        console.log(`[Cosmetic] Injected ${result.selectorCount} selectors for ${new URL(url).hostname}`);
-      }
-    } catch (e) {
-      console.error('[Cosmetic] Failed to inject CSS:', e);
-    }
-  }
-  
-  // ==================== Script Injection Methods (YouTube) ====================
-  
-  /**
-   * Inject ad-blocking scripts into a webview (primarily for YouTube)
-   * @param {HTMLWebViewElement} webview - The webview to inject into
-   * @param {string} url - The URL of the page
-   */
-  async injectAdBlockScript(webview, url) {
-    // Only inject if ad blocker is enabled
-    if (!this.adblockEnabled) {
-      return;
-    }
-    
-    // Skip internal pages
-    if (url.startsWith('forge://') || url.startsWith('about:') || url.startsWith('chrome://')) {
-      return;
-    }
-    
-    try {
-      // Get script for this URL from main process
-      const result = await window.forgeAPI.scriptInjector.getScript(url);
-      
-      if (result && result.hasScript && result.script) {
-        // Inject the script
-        const wrappedScript = `
-          try {
-            ${result.script}
-          } catch (e) {
-            console.error('[Forge] Script injection error:', e);
-          }
-        `;
-        
-        await webview.executeJavaScript(wrappedScript, true);
-      }
-    } catch (e) {
-      console.error('[Script] Failed to inject script:', e.message);
-    }
-  }
-
-  // URL Autocomplete Methods
-  handleUrlInputChange() {
-    const query = this.lastUserInput.trim() || this.urlInput.value.trim();
-    
-    if (query.length === 0) {
-      this.hideSuggestions();
-      return;
-    }
-    
-    // Debounce API calls
-    clearTimeout(this.suggestionDebounceTimer);
-    this.suggestionDebounceTimer = setTimeout(() => {
-      this.fetchSuggestions(query);
-    }, 150);
-  }
-  
-  async fetchSuggestions(query) {
-    try {
-      // Get history-based suggestions first (these are prioritized)
-      const historySuggestions = this.getHistorySuggestions(query);
-      
-      // Use IPC to fetch from main process (avoids CSP issues)
-      const googleSuggestions = await window.forgeAPI.getUrlSuggestions(query);
-      
-      // Merge: history first, then Google (without duplicates)
-      const historyDomains = new Set(historySuggestions.map(s => s.toLowerCase()));
-      const filteredGoogle = googleSuggestions.filter(s => !historyDomains.has(s.toLowerCase()));
-      
-      const mergedSuggestions = [...historySuggestions, ...filteredGoogle];
-      
-      if (mergedSuggestions.length > 0) {
-        this.suggestions = mergedSuggestions;
-        this.historySuggestionCount = historySuggestions.length; // Track how many are from history
-        this.renderSuggestions();
-        
-        // Show inline URL autocompletion
-        this.showInlineCompletion(query);
-      } else {
-        this.hideSuggestions();
-      }
-    } catch (error) {
-      console.error('[Autocomplete] Failed to fetch suggestions:', error);
-      this.hideSuggestions();
-    }
-  }
-  
-  getHistorySuggestions(query) {
-    if (!query || query.length < 2) return [];
-    
-    const queryLower = query.toLowerCase();
-    const domainScores = new Map(); // domain -> {score, url, visitCount}
-    
-    // Scan history for matching domains
-    for (const entry of this.browsingHistory) {
-      try {
-        const url = new URL(entry.url.startsWith('http') ? entry.url : 'https://' + entry.url);
-        const domain = url.hostname.replace(/^www\./, '');
-        const domainLower = domain.toLowerCase();
-        
-        // Check if domain matches the query
-        const domainWithoutTld = domainLower.split('.')[0];
-        
-        if (domainLower.startsWith(queryLower) || domainWithoutTld.startsWith(queryLower)) {
-          const existing = domainScores.get(domain);
-          if (existing) {
-            existing.visitCount++;
-            existing.score += 1; // More visits = higher score
-            // Boost recent visits
-            const ageHours = (Date.now() - entry.timestamp) / (1000 * 60 * 60);
-            if (ageHours < 24) existing.score += 5;
-            else if (ageHours < 168) existing.score += 2; // Within a week
-          } else {
-            let score = 10; // Base score for history match
-            const ageHours = (Date.now() - entry.timestamp) / (1000 * 60 * 60);
-            if (ageHours < 24) score += 5;
-            else if (ageHours < 168) score += 2;
-            
-            domainScores.set(domain, { score, url: entry.url, visitCount: 1 });
-          }
-        }
-      } catch (e) {
-        // Invalid URL, skip
-      }
-    }
-    
-    // Sort by score and return top domains
-    const sorted = [...domainScores.entries()]
-      .sort((a, b) => b[1].score - a[1].score)
-      .slice(0, 5)
-      .map(([domain]) => domain);
-    
-    return sorted;
-  }
-  
-  showInlineCompletion(originalInput) {
-    // Only show inline completion if the input hasn't changed
-    if (this.urlInput.value.trim() !== originalInput) return;
-    
-    const urlSuggestion = this.findUrlSuggestion(originalInput);
-    if (urlSuggestion) {
-      // Normalize the suggestion to a clean domain
-      let completion = urlSuggestion.toLowerCase()
-        .replace(/^(https?:\/\/)?(www\.)?/, '')
-        .split('/')[0];
-      
-      // Only autocomplete if the suggestion starts with what user typed
-      if (completion.startsWith(originalInput.toLowerCase())) {
-        // Show the full completion with the typed portion + rest selected
-        this.urlInput.value = completion;
-        this.urlInput.setSelectionRange(originalInput.length, completion.length);
-      }
-    }
-  }
-  
-  renderSuggestions() {
-    if (this.suggestions.length === 0) {
-      this.hideSuggestions();
-      return;
-    }
-    
-    this.urlSuggestions.innerHTML = '';
-    this.selectedSuggestionIndex = -1;
-    
-    this.suggestions.forEach((suggestion, index) => {
-      const item = document.createElement('div');
-      item.className = 'suggestion-item';
-      
-      // Mark history items with an icon
-      const isFromHistory = index < (this.historySuggestionCount || 0);
-      if (isFromHistory) {
-        item.classList.add('from-history');
-        const icon = document.createElement('span');
-        icon.className = 'suggestion-icon';
-        icon.innerHTML = '🕐';
-        item.appendChild(icon);
-      }
-      
-      const text = document.createElement('span');
-      text.textContent = suggestion;
-      item.appendChild(text);
-      
-      item.addEventListener('mouseenter', () => {
-        this.selectedSuggestionIndex = index;
-        this.updateSuggestionSelection();
-      });
-      
-      item.addEventListener('click', () => {
-        this.navigate(suggestion);
-        this.hideSuggestions();
-      });
-      
-      this.urlSuggestions.appendChild(item);
-    });
-    
-    this.urlSuggestions.classList.remove('hidden');
-    this.updateSuggestionSelection();
-  }
-  
-  selectNextSuggestion() {
-    if (this.suggestions.length === 0) return;
-    
-    this.selectedSuggestionIndex = (this.selectedSuggestionIndex + 1) % this.suggestions.length;
-    this.updateSuggestionSelection();
-  }
-  
-  selectPrevSuggestion() {
-    if (this.suggestions.length === 0) return;
-    
-    this.selectedSuggestionIndex = this.selectedSuggestionIndex <= 0
-      ? this.suggestions.length - 1
-      : this.selectedSuggestionIndex - 1;
-    this.updateSuggestionSelection();
-  }
-  
-  updateSuggestionSelection() {
-    const items = this.urlSuggestions.querySelectorAll('.suggestion-item');
-    items.forEach((item, index) => {
-      if (index === this.selectedSuggestionIndex) {
-        item.classList.add('selected');
-      } else {
-        item.classList.remove('selected');
-      }
-    });
-  }
-  
-  hideSuggestions() {
-    this.urlSuggestions.classList.add('hidden');
-    this.suggestions = [];
-    this.selectedSuggestionIndex = -1;
-  }
-  
-  // Find a URL suggestion that matches the user's input
-  findUrlSuggestion(input) {
-    if (!input || input.includes(' ') || this.suggestions.length === 0) {
-      return null;
-    }
-    
-    const inputLower = input.toLowerCase();
-    
-    // Common TLDs to look for
-    const tlds = ['.com', '.org', '.net', '.tv', '.io', '.co', '.edu', '.gov', '.me', '.app', '.dev', '.gg'];
-    
-    // First, prioritize history suggestions (they're at the start of the array)
-    const historyCount = this.historySuggestionCount || 0;
-    
-    // Check history suggestions first - these are domains that the user has visited
-    for (let i = 0; i < historyCount && i < this.suggestions.length; i++) {
-      const suggestion = this.suggestions[i];
-      const suggestionLower = suggestion.toLowerCase();
-      const domainWithoutTld = suggestionLower.split('.')[0];
-      
-      // History items are already domains, check if they match
-      if (suggestionLower.startsWith(inputLower) || domainWithoutTld.startsWith(inputLower)) {
-        return suggestion;
-      }
-    }
-    
-    // Then look at Google suggestions for URL-like matches
-    for (let i = historyCount; i < this.suggestions.length; i++) {
-      const suggestion = this.suggestions[i];
-      const suggestionLower = suggestion.toLowerCase();
-      
-      // Check if suggestion contains a TLD and starts similarly to input
-      const hasTld = tlds.some(tld => suggestionLower.includes(tld));
-      
-      if (hasTld) {
-        // Check if the domain part starts with what user typed
-        // e.g., "twitc" matches "twitch.tv"
-        const domainPart = suggestionLower.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
-        if (domainPart.startsWith(inputLower) || domainPart.replace(/\.[^.]+$/, '').startsWith(inputLower)) {
-          return suggestion;
-        }
-      }
-    }
-    
-    return null;
+    await window.forgeAPI.updates.checkForUpdates();
   }
 }
 
-// Initialize the browser
-document.addEventListener('DOMContentLoaded', () => {
-  window.forgeBrowser = new ForgeBrowser();
-});
+// Apply mixins
+applyMixin(ForgeBrowser, TabManagerMixin);
+applyMixin(ForgeBrowser, NavigationMixin);
+applyMixin(ForgeBrowser, WebviewEventsMixin);
+applyMixin(ForgeBrowser, UIPanelsMixin);
+applyMixin(ForgeBrowser, PasswordManagerMixin);
+applyMixin(ForgeBrowser, HistoryMixin);
+applyMixin(ForgeBrowser, FavoritesMixin);
+applyMixin(ForgeBrowser, AdBlockerMixin);
+applyMixin(ForgeBrowser, AIAssistantMixin);
+applyMixin(ForgeBrowser, UrlSuggestionsMixin);
+
+// Start the browser
+console.log('[Forge] Creating browser instance...');
+window.forgeBrowser = new ForgeBrowser();

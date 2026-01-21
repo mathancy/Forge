@@ -1,0 +1,245 @@
+// Navigation Module
+// Handles URL processing, back/forward, reload, and security indicators
+
+import { isInternalUrl, getDomain } from './utils.js';
+
+export const NavigationMixin = {
+  navigate(input) {
+    const url = this.processUrl(input);
+    
+    if (this.activeTabId) {
+      const tab = this.tabs.find(t => t.id === this.activeTabId);
+      if (tab) {
+        if (tab.isHome) {
+          this.createWebviewForHomeTab(tab, url);
+        } else if (tab.webview) {
+          tab.webview.src = url;
+        }
+      }
+    } else {
+      this.createTab(url);
+    }
+  },
+
+  createWebviewForHomeTab(tab, url) {
+    const webview = document.createElement('webview');
+    webview.id = tab.id;
+    webview.setAttribute('allowpopups', '');
+    webview.setAttribute('partition', 'persist:main');
+    webview.setAttribute('webpreferences', 'contextIsolation=yes');
+    
+    this.setupWebviewEvents(webview, tab.id);
+    
+    this.browserContent.appendChild(webview);
+    
+    tab.webview = webview;
+    tab.isHome = false;
+    tab.element.dataset.isHome = 'false';
+    
+    const iconElement = tab.element.querySelector('.tab-home-icon, .tab-favicon');
+    if (iconElement) {
+      iconElement.classList.remove('tab-home-icon');
+      iconElement.classList.add('tab-favicon');
+      iconElement.src = '';
+    }
+    
+    this.welcomePage.classList.add('hidden');
+    webview.classList.add('active');
+    
+    webview.src = url;
+    tab.url = url;
+    this.urlInput.value = url;
+    this.updateSecurityIndicator(url);
+  },
+
+  processUrl(input) {
+    input = input.trim();
+    
+    if (input.match(/^https?:\/\//i)) {
+      return input;
+    }
+    
+    if (input.match(/^[\w-]+\.[\w-]+/)) {
+      return 'https://' + input;
+    }
+    
+    return `https://www.google.com/search?q=${encodeURIComponent(input)}`;
+  },
+
+  goBack() {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.webview) {
+      tab.webview.goBack();
+    }
+  },
+
+  goForward() {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.webview) {
+      tab.webview.goForward();
+    }
+  },
+
+  reload() {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.webview) {
+      tab.webview.reload();
+    }
+  },
+
+  goHome() {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab) {
+      if (tab.webview) {
+        tab.webview.classList.remove('active');
+      }
+      tab.isHome = true;
+      tab.element.dataset.isHome = 'true';
+      
+      const iconElement = tab.element.querySelector('.tab-favicon, .tab-home-icon');
+      if (iconElement) {
+        iconElement.classList.remove('tab-favicon');
+        iconElement.classList.add('tab-home-icon');
+        iconElement.src = 'forge-asset://ui-icons/home.svg';
+      }
+      
+      tab.element.querySelector('.tab-title').textContent = 'Home';
+      this.showWelcomePage();
+    }
+  },
+
+  updateNavigationButtons() {
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.webview) {
+      try {
+        // These methods require dom-ready to have fired
+        this.btnBack.disabled = !tab.webview.canGoBack();
+        this.btnForward.disabled = !tab.webview.canGoForward();
+      } catch (e) {
+        // Webview not ready yet, disable both buttons
+        this.btnBack.disabled = true;
+        this.btnForward.disabled = true;
+      }
+    } else {
+      this.btnBack.disabled = true;
+      this.btnForward.disabled = true;
+    }
+  },
+
+  updateSecurityIndicator(url) {
+    if (!this.securityIndicator) return;
+    
+    if (!url || url.startsWith('forge://')) {
+      this.securityIndicator.className = 'security-indicator';
+      this.securityIndicator.innerHTML = '';
+    } else if (url.startsWith('https://')) {
+      this.securityIndicator.className = 'security-indicator secure';
+      this.securityIndicator.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="currentColor"/></svg>';
+    } else {
+      this.securityIndicator.className = 'security-indicator insecure';
+      this.securityIndicator.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h2v-2h-2v2zm0-4h2V7h-2v6z" fill="currentColor"/></svg>';
+    }
+  },
+
+  updateStatus(text) {
+    if (this.statusText) {
+      this.statusText.textContent = text;
+    }
+  },
+
+  // Webview context menu
+  showWebviewContextMenu(e, webview) {
+    this.contextMenuWebview = webview;
+    this.contextMenuParams = e.params;
+    
+    this.webviewContextMenu.style.left = e.params.x + 'px';
+    this.webviewContextMenu.style.top = e.params.y + 'px';
+    this.webviewContextMenu.classList.remove('hidden');
+    this.contextMenuOverlay.classList.remove('hidden');
+    
+    const hasSelection = e.params.selectionText && e.params.selectionText.length > 0;
+    const hasLink = e.params.linkURL && e.params.linkURL.length > 0;
+    const hasImage = e.params.hasImageContents;
+    
+    this.webviewContextMenu.querySelectorAll('.context-menu-item').forEach(item => {
+      const action = item.dataset.action;
+      if (action === 'copy' || action === 'search') {
+        item.style.display = hasSelection ? 'flex' : 'none';
+      } else if (action === 'open-link' || action === 'open-link-new-tab' || action === 'copy-link') {
+        item.style.display = hasLink ? 'flex' : 'none';
+      } else if (action === 'save-image' || action === 'copy-image') {
+        item.style.display = hasImage ? 'flex' : 'none';
+      }
+      
+      item.onclick = () => {
+        this.handleWebviewContextMenuAction(action);
+        this.hideWebviewContextMenu();
+      };
+    });
+  },
+
+  hideWebviewContextMenu() {
+    this.webviewContextMenu.classList.add('hidden');
+    this.contextMenuOverlay.classList.add('hidden');
+    this.contextMenuWebview = null;
+    this.contextMenuParams = null;
+  },
+
+  handleWebviewContextMenuAction(action) {
+    const webview = this.contextMenuWebview;
+    const params = this.contextMenuParams;
+    if (!webview || !params) return;
+    
+    switch (action) {
+      case 'back':
+        webview.goBack();
+        break;
+      case 'forward':
+        webview.goForward();
+        break;
+      case 'reload':
+        webview.reload();
+        break;
+      case 'copy':
+        webview.copy();
+        break;
+      case 'search':
+        if (params.selectionText) {
+          this.createTab(`https://www.google.com/search?q=${encodeURIComponent(params.selectionText)}`);
+        }
+        break;
+      case 'open-link':
+        if (params.linkURL) {
+          webview.src = params.linkURL;
+        }
+        break;
+      case 'open-link-new-tab':
+        if (params.linkURL) {
+          this.createTab(params.linkURL);
+        }
+        break;
+      case 'copy-link':
+        if (params.linkURL) {
+          navigator.clipboard.writeText(params.linkURL);
+        }
+        break;
+      case 'save-image':
+        if (params.srcURL) {
+          window.forgeAPI.downloadFile(params.srcURL);
+        }
+        break;
+      case 'copy-image':
+        if (params.srcURL) {
+          navigator.clipboard.writeText(params.srcURL);
+        }
+        break;
+      case 'inspect':
+        webview.inspectElement(params.x, params.y);
+        break;
+    }
+  }
+};

@@ -6,6 +6,7 @@ const ChromeImporter = require('./chrome-importer');
 const AIService = require('./ai-service');
 const autoUpdaterService = require('./auto-updater');
 const FavoritesService = require('./favorites-service');
+const PasswordService = require('./password-service');
 const { getAdBlocker, getCosmeticInjector, getScriptInjector } = require('./ad-blocker');
 
 // Initialize Chrome Importer
@@ -13,6 +14,9 @@ const chromeImporter = new ChromeImporter();
 
 // Initialize Favorites Service
 const favoritesService = new FavoritesService();
+
+// Initialize Password Service
+const passwordService = new PasswordService();
 
 // Initialize Ad Blocker (network blocking)
 const adBlocker = getAdBlocker();
@@ -167,6 +171,10 @@ app.whenReady().then(() => {
     const filePath = getAssetPath(url);
     callback({ path: filePath });
   });
+  
+  // Initialize services
+  favoritesService.initialize();
+  passwordService.initialize();
   
   createWindow();
   
@@ -544,4 +552,49 @@ app.whenReady().then(() => {
   } catch (err) {
     console.error('[Script Injector] Initialization failed:', err);
   }
+});
+
+// Password Manager IPC Handlers
+ipcMain.handle('passwords-get-all', () => {
+  return passwordService.getAllPasswords();
+});
+
+ipcMain.handle('passwords-get-for-url', (event, url) => {
+  return passwordService.getPasswordsForUrl(url);
+});
+
+ipcMain.handle('passwords-add', (event, url, username, password) => {
+  return passwordService.addPassword(url, username, password);
+});
+
+ipcMain.handle('passwords-update', (event, id, url, username, password) => {
+  passwordService.updatePassword(id, url, username, password);
+  return { success: true };
+});
+
+ipcMain.handle('passwords-delete', (event, id) => {
+  passwordService.deletePassword(id);
+  return { success: true };
+});
+
+ipcMain.handle('passwords-import-csv', (event, csvData) => {
+  return passwordService.importFromCSV(csvData);
+});
+
+ipcMain.handle('create-password-anvil-window', () => {
+  const passwordWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    title: 'Password Anvil',
+    icon: getAssetPath('forge-logo.ico'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, '../preload/preload.js')
+    }
+  });
+  
+  passwordWindow.loadFile(path.join(__dirname, '../renderer/password-anvil.html'));
+  return { success: true };
 });
