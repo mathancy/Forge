@@ -2,7 +2,7 @@
 
 A lightweight, privacy-focused browser built with Electron by **Forgeworks Interactive Limited**.
 
-![Forge Browser](assets/forge-logo.png)
+<img width="1652" height="1080" alt="forgebrowserrender" src="https://github.com/user-attachments/assets/aab2cbf5-1f60-4457-aa54-88d7c4c5fb49" />
 
 ## Features
 
@@ -153,3 +153,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 MIT © 2026 Forgeworks Interactive Limited
+
