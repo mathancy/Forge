@@ -1,6 +1,6 @@
 {
   "name": "forge-browser",
-  "version": "0.1.25-alpha",
+  "version": "0.1.26-alpha",
   "description": "Forge - A lightweight custom browser by Forgeworks Interactive Limited",
   "main": "src/main/main.js",
   "scripts": {
@@ -97,6 +97,7 @@
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "electron-log": "^5.4.3",
-    "electron-updater": "^6.7.3"
+    "electron-updater": "^6.7.3",
+    "three": "^0.182.0"
   }
 }

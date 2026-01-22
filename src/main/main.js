@@ -1,6 +1,10 @@
-const { app, BrowserWindow, ipcMain, session, protocol, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, session, protocol, nativeImage, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+// Disable default Electron menu to prevent Ctrl+R from reloading the whole window
+// Our renderer handles all keyboard shortcuts
+Menu.setApplicationMenu(null);
 const GoogleAuth = require('./google-auth');
 const ChromeImporter = require('./chrome-importer');
 const AIService = require('./ai-service');
@@ -72,6 +76,57 @@ function getAssetPath(...paths) {
 // Keep a global reference of the window object
 let mainWindow = null;
 
+// Handle keyboard shortcuts globally
+function handleKeyboardShortcut(event, input, targetWindow) {
+  if (input.type !== 'keyDown') return;
+  
+  const ctrl = input.control || input.meta;
+  const shift = input.shift;
+  const alt = input.alt;
+  const key = input.key.toLowerCase();
+  
+  // Define shortcuts that should be handled by the browser UI
+  let shortcut = null;
+  
+  if (ctrl && !shift && key === 't') shortcut = 'new-tab';
+  else if (ctrl && !shift && key === 'w') shortcut = 'close-tab';
+  else if (ctrl && shift && key === 't') shortcut = 'reopen-tab';
+  else if (ctrl && !shift && key === 'tab') shortcut = 'next-tab';
+  else if (ctrl && shift && key === 'tab') shortcut = 'prev-tab';
+  else if (ctrl && !shift && key === 'l') shortcut = 'focus-url';
+  else if (ctrl && shift && key === 'r') shortcut = 'hard-reload';
+  else if (ctrl && !shift && key === 'r') shortcut = 'reload';
+  else if (!ctrl && !shift && !alt && key === 'f5') shortcut = 'reload';
+  else if (alt && !ctrl && key === 'arrowleft') shortcut = 'go-back';
+  else if (alt && !ctrl && key === 'arrowright') shortcut = 'go-forward';
+  else if (ctrl && !shift && key === 'h') shortcut = 'show-history';
+  else if (key === 'escape') shortcut = 'close-popups';
+  else if (ctrl && shift && key === 'i') {
+    // Open DevTools for the main window (docked) - works for inspecting both browser UI and webviews
+    event.preventDefault();
+    targetWindow.webContents.openDevTools();
+    return;
+  }
+  
+  if (shortcut) {
+    event.preventDefault();
+    targetWindow.webContents.send('keyboard-shortcut', shortcut);
+  }
+}
+
+// Listen for all new webContents (including webviews) and add keyboard shortcut handling
+app.on('web-contents-created', (event, contents) => {
+  // Only handle webview webContents
+  if (contents.getType() === 'webview') {
+    contents.on('before-input-event', (event, input) => {
+      // Find the parent BrowserWindow to send the shortcut to
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        handleKeyboardShortcut(event, input, mainWindow);
+      }
+    });
+  }
+});
+
 // Forge Browser Configuration
 const FORGE_CONFIG = {
   name: 'Forge',
@@ -136,6 +191,15 @@ function createWindow() {
 
   // Load the browser UI
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+
+  // Maximize window on startup
+  mainWindow.maximize();
+
+  // Handle keyboard shortcuts globally (for main window, not webviews)
+  // Webviews are handled separately via app.on('web-contents-created')
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    handleKeyboardShortcut(event, input, mainWindow);
+  });
 
   // DevTools can be opened manually via menu or keyboard shortcut (Ctrl+Shift+I)
 
@@ -234,6 +298,14 @@ ipcMain.handle('window-close', (event) => {
 ipcMain.handle('window-is-maximized', (event) => {
   const window = BrowserWindow.fromWebContents(event.sender);
   return window?.isMaximized() ?? false;
+});
+
+// IPC Handler for opening DevTools (docked in main window)
+ipcMain.handle('open-devtools', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) {
+    window.webContents.openDevTools();
+  }
 });
 
 // IPC Handler for getting app info

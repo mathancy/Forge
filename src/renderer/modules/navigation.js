@@ -32,6 +32,9 @@ export const NavigationMixin = {
     
     this.browserContent.appendChild(webview);
     
+    // Apply current brightness setting to new webview
+    webview.style.filter = `brightness(${this.currentBrightness / 100})`;
+    
     tab.webview = webview;
     tab.isHome = false;
     tab.element.dataset.isHome = 'false';
@@ -87,6 +90,15 @@ export const NavigationMixin = {
     const tab = this.tabs.find(t => t.id === this.activeTabId);
     if (tab && tab.webview) {
       tab.webview.reload();
+    }
+  },
+
+  hardReload() {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.webview) {
+      // reloadIgnoringCache() bypasses the cache for a fresh reload
+      tab.webview.reloadIgnoringCache();
     }
   },
 

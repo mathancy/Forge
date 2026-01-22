@@ -61,6 +61,7 @@ export const UIPanelsMixin = {
         this.renderChromeImportPanel();
         break;
       case 'devtools':
+        this.hideMainMenu(true); // Instant hide
         this.openDevTools();
         break;
       case 'about':
@@ -77,10 +78,9 @@ export const UIPanelsMixin = {
   },
 
   openDevTools() {
-    const tab = this.tabs.find(t => t.id === this.activeTabId);
-    if (tab && tab.webview) {
-      tab.webview.openDevTools();
-    }
+    // Open DevTools for the main window (docked) via IPC to main process
+    // This opens the same DevTools as Ctrl+Shift+I
+    window.forgeAPI.openDevTools();
   },
 
   // Chrome Import panel

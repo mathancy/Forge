@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('forgeAPI', {
   maximize: () => ipcRenderer.invoke('window-maximize'),
   close: () => ipcRenderer.invoke('window-close'),
   isMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  openDevTools: () => ipcRenderer.invoke('open-devtools'),
   
   // Window state listeners
   onMaximized: (callback) => {
@@ -105,6 +106,11 @@ contextBridge.exposeInMainWorld('forgeAPI', {
   devTools: {
     open: (targetWebContentsId, devtoolsWebContentsId) => ipcRenderer.invoke('devtools-open', targetWebContentsId, devtoolsWebContentsId),
     close: (targetWebContentsId) => ipcRenderer.invoke('devtools-close', targetWebContentsId),
+  },
+  
+  // Keyboard shortcuts (from main process)
+  onKeyboardShortcut: (callback) => {
+    ipcRenderer.on('keyboard-shortcut', (event, shortcut) => callback(shortcut));
   },
 });
 

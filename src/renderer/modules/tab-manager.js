@@ -8,6 +8,8 @@ export const TabManagerMixin = {
     this.tabs = [];
     this.activeTabId = null;
     this.tabCounter = 0;
+    this.closedTabs = []; // Track closed tabs for Ctrl+Shift+T reopen
+    this.maxClosedTabs = 10; // Maximum number of closed tabs to remember
     
     // Drag state
     this.draggedTab = null;
@@ -149,6 +151,9 @@ export const TabManagerMixin = {
     
     this.browserContent.appendChild(webview);
     
+    // Apply current brightness setting to new webview
+    webview.style.filter = `brightness(${this.currentBrightness / 100})`;
+    
     // Get cached favicon before webview loads (if URL provided)
     let cachedFavicon = null;
     if (url) {
@@ -257,6 +262,23 @@ export const TabManagerMixin = {
     
     const tab = this.tabs[tabIndex];
     
+    // Save tab info for reopen (Ctrl+Shift+T) - only if it has a URL
+    if (tab.webview && !tab.isHome) {
+      try {
+        const url = tab.webview.getURL();
+        const title = tab.element.querySelector('.tab-title')?.textContent || 'Closed Tab';
+        if (url && url !== 'about:blank') {
+          this.closedTabs.unshift({ url, title, closedAt: Date.now() });
+          // Keep only the most recent closed tabs
+          if (this.closedTabs.length > this.maxClosedTabs) {
+            this.closedTabs.pop();
+          }
+        }
+      } catch (e) {
+        // Ignore errors getting URL
+      }
+    }
+    
     if (tab.audioCheckInterval) {
       clearInterval(tab.audioCheckInterval);
     }
@@ -325,6 +347,20 @@ export const TabManagerMixin = {
     }
   },
 
+  switchToNextTab() {
+    if (this.tabs.length <= 1) return;
+    const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+    const nextIndex = (currentIndex + 1) % this.tabs.length;
+    this.switchTab(this.tabs[nextIndex].id);
+  },
+
+  switchToPreviousTab() {
+    if (this.tabs.length <= 1) return;
+    const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+    const prevIndex = (currentIndex - 1 + this.tabs.length) % this.tabs.length;
+    this.switchTab(this.tabs[prevIndex].id);
+  },
+
   showWelcomePage() {
     this.welcomePage.classList.remove('hidden');
     this.urlInput.value = '';
@@ -388,6 +424,14 @@ export const TabManagerMixin = {
     if (tab && tab.webview) {
       tab.webview.reload();
     }
+  },
+
+  reopenClosedTab() {
+    if (this.closedTabs.length === 0) return false;
+    
+    const closedTab = this.closedTabs.shift(); // Get and remove the most recent
+    this.createTab(closedTab.url);
+    return true;
   },
 
   duplicateTab(tabId) {

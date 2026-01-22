@@ -41,7 +41,6 @@ A lightweight, privacy-focused browser built with Electron by **Forgeworks Inter
 |----------|--------|
 | `Ctrl+T` | New Tab |
 | `Ctrl+W` | Close Tab |
-| `Ctrl+Shift+T` | Reopen Closed Tab |
 | `Ctrl+Tab` | Next Tab |
 | `Ctrl+Shift+Tab` | Previous Tab |
 | `Ctrl+L` | Focus URL Bar |
@@ -50,10 +49,8 @@ A lightweight, privacy-focused browser built with Electron by **Forgeworks Inter
 | `Alt+Left` | Back |
 | `Alt+Right` | Forward |
 | `Ctrl+H` | History |
-| `Ctrl+J` | Downloads |
-| `Ctrl+D` | Bookmark Page |
-| `F11` | Toggle Fullscreen |
 | `Ctrl+Shift+I` | Developer Tools |
+| `Escape` | Close Popups/Panels |
 
 ## Installation
 
