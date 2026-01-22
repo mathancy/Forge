@@ -19,7 +19,7 @@ A lightweight, privacy-focused browser built with Electron by **Forgeworks Inter
 - **Code Highlighting** - Syntax highlighting for code blocks in AI responses
 
 ### 🎨 Modern Interface
-- **Dark Theme** - Clean, modern dark UI with smooth animations
+- **Customizable Theme** - Clean, modern UI with smooth animations and interchangeable themes
 - **Tabbed Browsing** - Full tab management with drag-and-drop reordering
 - **Split View** - Side-by-side browsing capability
 - **Sidebar Panels** - Quick access to History, Downloads, Bookmarks, and Settings
@@ -142,9 +142,11 @@ ForgeBrowser/
 - [x] Password Manager with CSV import
 - [x] AI Assistant integration
 - [x] Auto-updater
+- [x] Custom themes
+- [ ] User-created theme support
 - [ ] Extensions/plugin support
 - [ ] Sync across devices
-- [ ] Custom themes
+
 
 ## Contributing
 
@@ -153,5 +155,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 MIT © 2026 Forgeworks Interactive Limited
+
 
 
