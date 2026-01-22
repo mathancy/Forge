@@ -14,26 +14,25 @@ A lightweight, privacy-focused browser built with Electron by **Forgeworks Inter
 - **Password Manager** - Securely store and auto-fill credentials with CSV import support
 
 ### 🤖 AI Assistant
-- **Built-in AI Chat** - Integrated AI assistant powered by configurable API endpoints
-- **Page Context Aware** - AI can analyze and answer questions about the current page
-- **Code Highlighting** - Syntax highlighting for code blocks in AI responses
+- **Built-in AI Chat** - Integrated AI assistant sidebar
+- **Multi-Agent Support** - ChatGPT, Claude, Grok and Gemini are available to use after sign in
+- **Toggleable Visibility** - You can choose which agents are available in the 'AI Assistants' panel
 
 ### 🎨 Modern Interface
 - **Customizable Theme** - Clean, modern UI with smooth animations and interchangeable themes
 - **Tabbed Browsing** - Full tab management with drag-and-drop reordering
-- **Split View** - Side-by-side browsing capability
-- **Sidebar Panels** - Quick access to History, Downloads, Bookmarks, and Settings
+- **Sidebar Panels** - Quick access to History, Downloads (soon), Bookmarks (soon), Favorites and Settings (soon)
 - **Responsive Design** - Adapts to different window sizes
 
 ### 📚 Organization
 - **History Panel** - Browse and search your browsing history
-- **Bookmarks** - Save and organize your favorite sites
-- **Downloads Manager** - Track and manage file downloads
+- **Bookmarks** - Save and organize your favorite sites (soon)
+- **Downloads Manager** - Track and manage file downloads (soon)
 
 ### ⚡ Performance
 - **Lightweight** - Minimal footprint, maximum performance
 - **Auto Updates** - Built-in update system keeps you current
-- **Session Restore** - Tabs persist across browser restarts
+- **Session Restore** - Tabs persist across browser restarts (soon)
 
 ### ⌨️ Keyboard Shortcuts
 
@@ -136,13 +135,16 @@ ForgeBrowser/
 ## Roadmap
 
 - [x] Native ad-blocker with multiple filter lists
-- [x] Bookmarks management
 - [x] History panel
-- [x] Downloads manager
 - [x] Password Manager with CSV import
 - [x] AI Assistant integration
+- [x] Favorites management
 - [x] Auto-updater
 - [x] Custom themes
+- [ ] Bookmarks management
+- [ ] Downloads manager
+- [ ] Restore tabs on session restart
+- [ ] Complete system-wide Settings panel
 - [ ] User-created theme support
 - [ ] Extensions/plugin support
 - [ ] Sync across devices
@@ -155,6 +157,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 MIT © 2026 Forgeworks Interactive Limited
+
 
 
 
