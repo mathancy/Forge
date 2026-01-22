@@ -92,10 +92,16 @@ export const WelcomeParticlesMixin = {
       if (particle.y > height + 5) particle.y = -5;
       
       // Draw particle as a glowing ember with color variation
-      // Interpolate between darker orange (255, 150, 30) and paler orange (255, 200, 100)
-      const r = 255;
-      const g = Math.round(150 + (50 * particle.colorVariation)); // 150-200
-      const b = Math.round(30 + (70 * particle.colorVariation)); // 30-100
+      // Get colors from CSS variables (theme-aware)
+      const rootStyle = getComputedStyle(document.documentElement);
+      const r = parseInt(rootStyle.getPropertyValue('--particle-r')) || 255;
+      const gMin = parseInt(rootStyle.getPropertyValue('--particle-g-min')) || 150;
+      const gMax = parseInt(rootStyle.getPropertyValue('--particle-g-max')) || 200;
+      const bMin = parseInt(rootStyle.getPropertyValue('--particle-b-min')) || 30;
+      const bMax = parseInt(rootStyle.getPropertyValue('--particle-b-max')) || 100;
+      
+      const g = Math.round(gMin + ((gMax - gMin) * particle.colorVariation));
+      const b = Math.round(bMin + ((bMax - bMin) * particle.colorVariation));
       
       const gradient = ctx.createRadialGradient(
         particle.x, particle.y, 0,

@@ -207,6 +207,10 @@
         <span class="adblock-stats" id="adblock-stats"></span>
         <span class="menu-toggle" id="adblock-toggle"></span>
       </div>
+      <div class="context-menu-item" data-action="themes">
+        <img class="menu-icon" src="../../assets/ui-icons/customize.svg" width="16" height="16" alt="">
+        Themes
+      </div>
       <div class="context-menu-item" data-action="ai-assistant">
         <img class="menu-icon" src="../../assets/ui-icons/ai.svg" width="16" height="16" alt="">
         AI Assistant
@@ -400,6 +404,90 @@
         </div>
         <div class="forge-modal-footer">
           <button id="notification-modal-ok" class="modal-btn modal-btn-primary">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Themes Modal -->
+    <div id="themes-modal" class="forge-modal hidden">
+      <div class="forge-modal-content">
+        <div class="forge-modal-header themes-modal-header">
+          <h3>Themes</h3>
+          <button id="btn-close-themes-modal" class="panel-close-btn" title="Close">
+            <svg width="14" height="14" viewBox="0 0 14 14">
+              <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+          </button>
+        </div>
+        <div class="forge-modal-body">
+          <p class="themes-description">Customize your Forge</p>
+          <div class="themes-grid">
+            <div class="theme-option selected" data-theme="forge-dark">
+              <div class="theme-info">
+                <div class="theme-name">Forge Dark</div>
+              </div>
+              <div class="theme-preview">
+                <div class="theme-colors-gradient forge-dark-gradient"></div>
+              </div>
+              <div class="theme-checkmark">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M16.6668 5L7.50016 14.1667L3.3335 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+            <div class="theme-option" data-theme="forge-light">
+              <div class="theme-info">
+                <div class="theme-name">Forge Light</div>
+              </div>
+              <div class="theme-preview">
+                <div class="theme-colors-gradient forge-light-gradient"></div>
+              </div>
+              <div class="theme-checkmark">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M16.6668 5L7.50016 14.1667L3.3335 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+            <div class="theme-option" data-theme="abyssal-red">
+              <div class="theme-info">
+                <div class="theme-name">Abyssal Red</div>
+              </div>
+              <div class="theme-preview">
+                <div class="theme-colors-gradient abyssal-red-gradient"></div>
+              </div>
+              <div class="theme-checkmark">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M16.6668 5L7.50016 14.1667L3.3335 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+            <div class="theme-option" data-theme="steelheart">
+              <div class="theme-info">
+                <div class="theme-name">Steelheart</div>
+              </div>
+              <div class="theme-preview">
+                <div class="theme-colors-gradient steelheart-gradient"></div>
+              </div>
+              <div class="theme-checkmark">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M16.6668 5L7.50016 14.1667L3.3335 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+            <div class="theme-option" data-theme="rustveil">
+              <div class="theme-info">
+                <div class="theme-name">Rustveil</div>
+              </div>
+              <div class="theme-preview">
+                <div class="theme-colors-gradient rustveil-gradient"></div>
+              </div>
+              <div class="theme-checkmark">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M16.6668 5L7.50016 14.1667L3.3335 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

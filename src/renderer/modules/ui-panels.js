@@ -34,7 +34,7 @@ export const UIPanelsMixin = {
   },
 
   handleMainMenuAction(action) {
-    const panelActions = ['history', 'password-anvil', 'ai-assistant', 'import-chrome', 'about'];
+    const panelActions = ['history', 'password-anvil', 'ai-assistant', 'themes', 'import-chrome', 'about'];
     const toggleActions = ['favorites', 'adblock']; // Actions that don't close the menu
     const isOpeningPanel = panelActions.includes(action);
     const isToggleAction = toggleActions.includes(action);
@@ -50,6 +50,10 @@ export const UIPanelsMixin = {
       case 'password-anvil':
         this.hideMainMenu(true); // Instant hide
         this.showPasswordAnvil();
+        break;
+      case 'themes':
+        this.hideMainMenu(true); // Instant hide
+        this.showThemesModal();
         break;
       case 'ai-assistant':
         this.hideMainMenu(true); // Instant hide

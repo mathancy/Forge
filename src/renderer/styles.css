@@ -210,24 +210,24 @@ body.tab-dragging *::after {
 }
 
 .tab-icon-plus {
-  filter: brightness(0) saturate(100%) invert(64%) sepia(53%) saturate(3098%) hue-rotate(335deg) brightness(102%) contrast(101%);
+  filter: var(--icon-filter-accent);
 }
 
 .tab-home-icon {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  filter: brightness(0) saturate(100%) invert(95%) sepia(10%) saturate(800%) hue-rotate(333deg) brightness(103%) contrast(101%);
+  filter: var(--icon-filter-primary);
 }
 
 .nav-home-icon {
   width: 16px;
   height: 16px;
-  filter: brightness(0) saturate(100%) invert(95%) sepia(10%) saturate(800%) hue-rotate(333deg) brightness(103%) contrast(101%);
+  filter: var(--icon-filter-primary);
 }
 
 .nav-btn:hover .nav-home-icon {
-  filter: brightness(0) saturate(100%) invert(64%) sepia(53%) saturate(3098%) hue-rotate(335deg) brightness(102%) contrast(101%);
+  filter: var(--icon-filter-accent);
 }
 
 .tab-title {
@@ -249,7 +249,7 @@ body.tab-dragging *::after {
 }
 
 .tab-title-logo[src*="YouTube.svg"] {
-  filter: brightness(0) saturate(100%) invert(93%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(103%) contrast(91%);
+  filter: var(--icon-filter-primary);
 }
 
 .tab-title-logo[src*="Google.svg"] {
@@ -357,7 +357,7 @@ body.tab-dragging *::after {
 }
 
 .tab-btn img {
-  filter: brightness(0) saturate(100%) invert(64%) sepia(53%) saturate(3098%) hue-rotate(335deg) brightness(102%) contrast(101%);
+  filter: var(--icon-filter-accent);
 }
 
 /* Navigation Bar */
@@ -404,15 +404,15 @@ body.tab-dragging *::after {
 .nav-icon {
   width: 16px;
   height: 16px;
-  filter: brightness(0) saturate(100%) invert(55%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(95%) contrast(85%);
+  filter: var(--icon-filter-secondary);
 }
 
 .nav-btn:disabled .nav-icon {
-  filter: brightness(0) saturate(100%) invert(35%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(95%) contrast(85%);
+  filter: var(--icon-filter-disabled);
 }
 
 .nav-btn:hover:not(:disabled) .nav-icon {
-  filter: brightness(0) saturate(100%) invert(64%) sepia(53%) saturate(3098%) hue-rotate(335deg) brightness(102%) contrast(101%);
+  filter: var(--icon-filter-accent);
 }
 
 .nav-menu-icon {
@@ -439,7 +439,7 @@ body.tab-dragging *::after {
 
 .url-container:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.2);
+  box-shadow: 0 0 0 2px var(--focus-glow);
 }
 
 .security-indicator {
@@ -699,6 +699,7 @@ webview.active {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  filter: var(--icon-filter-accent);
 }
 
 @keyframes pulse {
@@ -714,7 +715,7 @@ webview.active {
   font-family: 'Cinzel', serif;
   font-size: 18px;
   font-weight: 400;
-  color: #FFF6D3;
+  color: var(--text-primary);
   margin-bottom: -16px;
 }
 
@@ -724,25 +725,25 @@ webview.active {
   font-weight: 600;
   color: var(--accent);
   text-shadow: 
-    0 0 5px rgba(255, 150, 30, 0.3),
-    0 0 10px rgba(255, 150, 30, 0.2),
-    0 0 15px rgba(255, 150, 30, 0.1);
+    0 0 5px var(--glow-color-base),
+    0 0 10px var(--glow-color-mid),
+    0 0 15px var(--glow-color-far);
   animation: forgeGlow 3s ease-in-out infinite;
 }
 
 @keyframes forgeGlow {
   0%, 100% {
     text-shadow: 
-      0 0 5px rgba(255, 150, 30, 0.3),
-      0 0 10px rgba(255, 150, 30, 0.2),
-      0 0 15px rgba(255, 150, 30, 0.1);
+      0 0 5px var(--glow-color-base),
+      0 0 10px var(--glow-color-mid),
+      0 0 15px var(--glow-color-far);
     filter: brightness(1);
   }
   50% {
     text-shadow: 
-      0 0 8px rgba(255, 179, 71, 0.4),
-      0 0 12px rgba(255, 179, 71, 0.25),
-      0 0 18px rgba(255, 179, 71, 0.15);
+      0 0 8px var(--glow-color-hover-base),
+      0 0 12px var(--glow-color-hover-mid),
+      0 0 18px var(--glow-color-hover-far);
     filter: brightness(1.05);
   }
 }
@@ -785,7 +786,7 @@ webview.active {
 
 .search-box input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(233, 69, 96, 0.2);
+  box-shadow: 0 0 0 4px var(--focus-glow);
 }
 
 .search-box input::placeholder {
@@ -1035,13 +1036,13 @@ webview.active {
 .brightness-icon {
   flex-shrink: 0;
   stroke: currentColor;
-  filter: brightness(0) saturate(100%) invert(97%) sepia(6%) saturate(671%) hue-rotate(333deg) brightness(103%) contrast(92%);
+  filter: var(--icon-filter-primary);
   pointer-events: none;
   transition: filter 0.15s;
 }
 
 .menu-brightness-control:hover .brightness-icon {
-  filter: brightness(0) saturate(100%) invert(78%) sepia(53%) saturate(1057%) hue-rotate(344deg) brightness(103%) contrast(97%);
+  filter: var(--icon-filter-accent-hover);
 }
 
 .brightness-slider {
@@ -1085,12 +1086,12 @@ webview.active {
 .context-menu-item .menu-icon {
   margin-right: 10px;
   vertical-align: middle;
-  filter: brightness(0) saturate(100%) invert(97%) sepia(6%) saturate(671%) hue-rotate(333deg) brightness(103%) contrast(92%);
+  filter: var(--icon-filter-primary);
   transition: filter 0.15s;
 }
 
 .context-menu-item:hover .menu-icon {
-  filter: brightness(0) saturate(100%) invert(78%) sepia(53%) saturate(1057%) hue-rotate(344deg) brightness(103%) contrast(97%);
+  filter: var(--icon-filter-accent-hover);
 }
 
 /* History Panel */
@@ -1222,7 +1223,7 @@ webview.active {
 .panel-btn-icon img {
   width: 14px;
   height: 14px;
-  filter: brightness(0) saturate(100%) invert(60%) sepia(8%) saturate(329%) hue-rotate(183deg) brightness(95%) contrast(88%);
+  filter: var(--icon-filter-secondary);
   transition: all 0.15s;
 }
 
@@ -1242,7 +1243,7 @@ webview.active {
 .panel-btn-danger img {
   width: 14px;
   height: 14px;
-  filter: brightness(0) saturate(100%) invert(60%) sepia(8%) saturate(329%) hue-rotate(183deg) brightness(95%) contrast(88%);
+  filter: var(--icon-filter-secondary);
   transition: all 0.15s;
 }
 
@@ -1365,7 +1366,7 @@ webview.active {
 .history-delete img {
   width: 14px;
   height: 14px;
-  filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(1722%) hue-rotate(360deg) brightness(103%) contrast(106%);
+  filter: var(--icon-filter-secondary);
 }
 
 .history-item:hover .history-item-delete,
@@ -1380,7 +1381,7 @@ webview.active {
 
 .history-item-delete:hover img,
 .history-delete:hover img {
-  filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(1722%) hue-rotate(360deg) brightness(110%) contrast(106%);
+  filter: var(--icon-filter-accent);
 }
 
 .panel-empty {
@@ -1493,7 +1494,7 @@ webview.active {
 .password-action-btn img {
   width: 14px;
   height: 14px;
-  filter: brightness(0) saturate(100%) invert(70%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(100%) contrast(100%);
+  filter: var(--icon-filter-secondary);
 }
 
 .password-action-btn:hover {
@@ -1501,19 +1502,19 @@ webview.active {
 }
 
 .password-action-btn:hover img {
-  filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(1722%) hue-rotate(360deg) brightness(103%) contrast(106%);
+  filter: var(--icon-filter-accent);
 }
 
 .password-action-btn.copy img {
-  filter: brightness(0) saturate(100%) invert(70%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(100%) contrast(100%);
+  filter: var(--icon-filter-secondary);
 }
 
 .password-action-btn.copy:hover img {
-  filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(1722%) hue-rotate(360deg) brightness(103%) contrast(106%);
+  filter: var(--icon-filter-accent);
 }
 
 .password-action-btn.copy.copied img {
-  filter: brightness(0) saturate(100%) invert(60%) sepia(80%) saturate(500%) hue-rotate(85deg) brightness(95%) contrast(90%);
+  filter: var(--icon-filter-success);
 }
 
 .password-empty {
@@ -1695,6 +1696,169 @@ webview.active {
   background: linear-gradient(135deg, #c82333, #dc3545);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+/* Themes Modal */
+.themes-modal-header {
+  justify-content: center;
+  position: relative;
+  align-items: center;
+}
+
+.themes-modal-header h3 {
+  font-family: 'Cinzel', serif;
+  font-size: 20px;
+  letter-spacing: 0.5px;
+  text-align: center;
+  width: 100%;
+}
+
+.themes-modal-header .panel-close-btn {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.themes-description {
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.themes-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: var(--bg-primary);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.theme-option:hover {
+  border-color: var(--text-secondary);
+  transform: translateY(-2px);
+}
+
+.theme-option.selected {
+  border-color: var(--accent);
+  background: rgba(255, 150, 30, 0.05);
+}
+
+.theme-info {
+  flex-shrink: 0;
+  min-width: 120px;
+}
+
+.theme-name {
+  font-family: 'Cinzel', serif;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.theme-preview {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.theme-colors-gradient {
+  height: 40px;
+  width: 240px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.forge-dark-gradient {
+  background: linear-gradient(
+    120deg,
+    #161616 0%,
+    #161616 39.5%,
+    #1e1e1e 40%,
+    #1e1e1e 69.5%,
+    #ff961E 70%,
+    #ff961E 84.5%,
+    #eaeaea 85%,
+    #eaeaea 100%
+  );
+}
+
+.forge-light-gradient {
+  background: linear-gradient(
+    120deg,
+    #f5f5f5 0%,
+    #f5f5f5 39.5%,
+    #e0e0e0 40%,
+    #e0e0e0 69.5%,
+    #ff961E 70%,
+    #ff961E 84.5%,
+    #2a2a2a 85%,
+    #2a2a2a 100%
+  );
+}
+
+.abyssal-red-gradient {
+  background: linear-gradient(
+    120deg,
+    #0f0f0f 0%,
+    #0f0f0f 39.5%,
+    #151515 40%,
+    #151515 69.5%,
+    #CC0000 70%,
+    #CC0000 84.5%,
+    #eaeaea 85%,
+    #eaeaea 100%
+  );
+}
+
+.steelheart-gradient {
+  background: linear-gradient(
+    120deg,
+    #0a0a0a 0%,
+    #0a0a0a 39.5%,
+    #141414 40%,
+    #141414 69.5%,
+    #4A7C9D 70%,
+    #4A7C9D 84.5%,
+    #c0c0c0 85%,
+    #c0c0c0 100%
+  );
+}
+
+.rustveil-gradient {
+  background: linear-gradient(
+    120deg,
+    #0a0a0a 0%,
+    #0a0a0a 39.5%,
+    #1a0f0d 40%,
+    #1a0f0d 69.5%,
+    #A67C52 70%,
+    #A67C52 84.5%,
+    #D4BFA8 85%,
+    #D4BFA8 100%
+  );
+}
+
+.theme-checkmark {
+  opacity: 0;
+  color: var(--accent);
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.theme-option.selected .theme-checkmark {
+  opacity: 1;
 }
 
 .modal-header {
@@ -2262,11 +2426,11 @@ webview.active {
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  filter: brightness(0) saturate(100%) invert(97%) sepia(6%) saturate(671%) hue-rotate(333deg) brightness(103%) contrast(92%);
+  filter: var(--icon-filter-primary);
 }
 
 .ai-agent-btn:hover img {
-  filter: brightness(0) saturate(100%) invert(78%) sepia(53%) saturate(1057%) hue-rotate(344deg) brightness(103%) contrast(97%);
+  filter: var(--icon-filter-accent-hover);
 }
 
 /* AI Settings Panel */
@@ -2655,7 +2819,7 @@ body.ai-panel-open .favorites-panel:not(.hidden) {
 
 /* AI toolbar icons - cream color #FFF6D3 */
 .ai-toolbar-icon {
-  filter: brightness(0) saturate(100%) invert(95%) sepia(10%) saturate(400%) hue-rotate(10deg) brightness(103%) contrast(96%);
+  filter: var(--icon-filter-primary);
 }
 
 /* AI settings panel icons */
@@ -2790,11 +2954,11 @@ body.ai-panel-open .favorites-panel:not(.hidden) {
 .favorites-btn .nav-icon {
   width: 18px;
   height: 18px;
-  filter: brightness(0) saturate(100%) invert(97%) sepia(6%) saturate(671%) hue-rotate(333deg) brightness(103%) contrast(92%);
+  filter: var(--icon-filter-primary);
 }
 
 .favorites-btn:hover .nav-icon {
-  filter: brightness(0) saturate(100%) invert(78%) sepia(53%) saturate(1057%) hue-rotate(344deg) brightness(103%) contrast(97%);
+  filter: var(--icon-filter-accent-hover);
 }
 
 /* Favorites Panel */
@@ -2931,7 +3095,7 @@ body.ai-panel-open .favorites-panel:not(.hidden) {
   width: 10px;
   height: 10px;
   /* Grey filter */
-  filter: brightness(0) saturate(100%) invert(60%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%) contrast(90%);
+  filter: var(--icon-filter-secondary);
   transition: filter 0.15s ease;
 }
 
@@ -2942,7 +3106,7 @@ body.ai-panel-open .favorites-panel:not(.hidden) {
 
 .favorite-action-btn:hover img {
   /* Orange/accent filter */
-  filter: brightness(0) saturate(100%) invert(78%) sepia(53%) saturate(1057%) hue-rotate(344deg) brightness(103%) contrast(97%);
+  filter: var(--icon-filter-accent-hover);
 }
 
 /* Favorites Edit Dialog */

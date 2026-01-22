@@ -20,6 +20,7 @@ import { KeyboardShortcutsMixin } from './modules/keyboard-shortcuts.js';
 import { BrightnessControlMixin } from './modules/brightness-control.js';
 import { WelcomeParticlesMixin } from './modules/welcome-particles.js';
 import { ModalSystemMixin } from './modules/modal-system.js';
+import { ThemesMixin } from './modules/themes.js';
 
 console.log('[Forge] Loading modular renderer...');
 
@@ -99,6 +100,7 @@ class ForgeBrowser {
     this.initKeyboardShortcuts();
     this.initWelcomeParticles();
     this.initModalSystem();
+    this.initThemes();
     
     await this.initAdBlocker();
     await this.initFavorites();
@@ -447,6 +449,7 @@ applyMixin(ForgeBrowser, WindowControlsMixin);    // Window minimize/maximize/cl
 applyMixin(ForgeBrowser, KeyboardShortcutsMixin); // Keyboard shortcuts
 applyMixin(ForgeBrowser, BrightnessControlMixin); // Brightness slider
 applyMixin(ForgeBrowser, WelcomeParticlesMixin);  // Welcome page particles
+applyMixin(ForgeBrowser, ThemesMixin);            // Theme management
 applyMixin(ForgeBrowser, ModalSystemMixin);       // Modal dialogs and notifications
 
 // Start the browser
