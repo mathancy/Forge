@@ -232,11 +232,18 @@ export const HistoryMixin = {
   /**
    * Clear all history
    */
-  clearHistory() {
-    if (confirm('Are you sure you want to clear all browsing history?')) {
+  async clearHistory() {
+    const confirmed = await this.showConfirmation(
+      'Clear All History',
+      'Are you sure you want to clear all browsing history?\n\nThis action cannot be undone!',
+      { danger: true, confirmText: 'Clear All' }
+    );
+    
+    if (confirmed) {
       this.browsingHistory = [];
       this.saveBrowsingHistory();
       this.renderHistoryList();
+      await this.showSuccess('Browsing history has been cleared.');
     }
   }
 };

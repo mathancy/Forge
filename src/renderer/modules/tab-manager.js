@@ -331,14 +331,26 @@ export const TabManagerMixin = {
       if (tab.isHome) {
         this.showWelcomePage();
       } else {
-        this.welcomePage.classList.add('hidden');
         if (tab.webview) {
           tab.webview.classList.add('active');
           try {
             const url = tab.webview.getURL();
+            // Check if tab is blank (no URL or about:blank)
+            if (!url || url === 'about:blank') {
+              // Show welcome page in blank mode (particles only)
+              this.welcomePage.classList.remove('hidden');
+              this.welcomePage.classList.add('blank-tab');
+            } else {
+              // Hide welcome page completely
+              this.welcomePage.classList.add('hidden');
+              this.welcomePage.classList.remove('blank-tab');
+            }
             this.urlInput.value = url || '';
             this.updateSecurityIndicator(url);
           } catch (e) {
+            // No URL yet, show blank background
+            this.welcomePage.classList.remove('hidden');
+            this.welcomePage.classList.add('blank-tab');
             this.urlInput.value = '';
           }
           this.updateNavigationButtons();
@@ -363,6 +375,7 @@ export const TabManagerMixin = {
 
   showWelcomePage() {
     this.welcomePage.classList.remove('hidden');
+    this.welcomePage.classList.remove('blank-tab');
     this.urlInput.value = '';
     this.updateSecurityIndicator('');
     this.btnBack.disabled = true;

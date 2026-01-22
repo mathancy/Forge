@@ -11,6 +11,9 @@ export const PasswordManagerMixin = {
   // Store passwords for filtering
   _passwords: [],
   
+  // Store import preview data
+  _importPreviewData: [],
+  
   /**
    * Initialize password manager
    */
@@ -184,7 +187,7 @@ export const PasswordManagerMixin = {
     const editId = this.passwordEditId?.value;
     
     if (!url || !username || !password) {
-      alert('Please fill in all fields');
+      await this.showError('Please fill in all fields', 'Validation Error');
       return;
     }
     
@@ -199,7 +202,7 @@ export const PasswordManagerMixin = {
       await this.loadPasswords();
     } catch (err) {
       console.error('[PasswordManager] Failed to save password:', err);
-      alert('Failed to save password');
+      await this.showError('Failed to save password: ' + err.message);
     }
   },
 
@@ -217,12 +220,19 @@ export const PasswordManagerMixin = {
    * Delete password
    */
   async deletePassword(id) {
-    if (confirm('Are you sure you want to delete this password?')) {
+    const confirmed = await this.showConfirmation(
+      'Delete Password',
+      'Are you sure you want to delete this password?',
+      { danger: true, confirmText: 'Delete' }
+    );
+    
+    if (confirmed) {
       try {
         await window.electronAPI.passwords.delete(id);
         await this.loadPasswords();
       } catch (err) {
         console.error('[PasswordManager] Failed to delete password:', err);
+        await this.showError('Failed to delete password: ' + err.message);
       }
     }
   },
@@ -249,9 +259,442 @@ export const PasswordManagerMixin = {
   },
 
   /**
+   * Delete all passwords
+   */
+  async deleteAllPasswords() {
+    const confirmed = await this.showConfirmation(
+      'Delete All Passwords',
+      'Are you sure you want to delete ALL passwords?\n\n' +
+      'This will permanently delete:\n' +
+      '• All saved passwords\n' +
+      '• The encryption key\n\n' +
+      'This action cannot be undone!',
+      { danger: true, confirmText: 'Delete All' }
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      const result = await window.electronAPI.passwords.deleteAll();
+      
+      if (result.success) {
+        await this.showSuccess('All passwords have been deleted.');
+        await this.loadPasswords();
+      } else {
+        await this.showError('Failed to delete passwords: ' + (result.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('[PasswordManager] Failed to delete all passwords:', err);
+      await this.showError('Failed to delete passwords: ' + err.message);
+    }
+  },
+
+  /**
    * Import passwords from CSV
    */
   async importPasswordsCSV(file) {
+    // This method is now replaced by showPasswordImportModal
+    // Kept for backward compatibility
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const csvData = e.target.result;
+        const result = await this.parseCSVForPreview(csvData);
+        this._importPreviewData = result.entries;
+        this._duplicateCount = result.duplicateCount;
+        
+        // Check if all passwords are duplicates (nothing to import)
+        if (this._importPreviewData.length === 0 && this._duplicateCount > 0) {
+          this.showAllDuplicatesError();
+          return;
+        }
+        
+        this.renderImportPreview();
+        this.showPasswordImportModal(true);
+        
+        // Show duplicate notification if any
+        if (this._duplicateCount > 0) {
+          this.showDuplicateNotification();
+        }
+      } catch (err) {
+        console.error('[PasswordManager] Failed to parse CSV:', err);
+        await this.showError('Failed to read CSV file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  },
+
+  /**
+   * Show password import modal
+   */
+  showPasswordImportModal(showPreview = false) {
+    const modal = document.getElementById('password-import-modal');
+    const instructions = document.getElementById('import-instructions');
+    const preview = document.getElementById('import-preview');
+    
+    if (!modal) return;
+    
+    if (showPreview) {
+      instructions?.classList.add('hidden');
+      preview?.classList.remove('hidden');
+    } else {
+      instructions?.classList.remove('hidden');
+      preview?.classList.add('hidden');
+      this._importPreviewData = [];
+    }
+    
+    modal.classList.remove('hidden');
+  },
+
+  /**
+   * Hide password import modal
+   */
+  hidePasswordImportModal() {
+    const modal = document.getElementById('password-import-modal');
+    modal?.classList.add('hidden');
+    this._importPreviewData = [];
+    
+    // Reset file input
+    if (this.passwordFileInput) {
+      this.passwordFileInput.value = '';
+    }
+  },
+
+  /**
+   * Parse CSV and validate entries for preview
+   */
+  async parseCSVForPreview(csvData) {
+    const lines = csvData.split('\n');
+    const entries = [];
+    let duplicateCount = 0;
+    
+    // Get existing passwords to check for duplicates
+    const existingPasswords = await window.electronAPI.passwords.getAll();
+    const existingSet = new Set(
+      existingPasswords.map(p => `${p.url}|${p.username}`)
+    );
+    
+    // Skip header row (name,url,username,password)
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const lineNum = i + 1;
+      
+      try {
+        const fields = this.parseCSVLine(line);
+        
+        if (fields.length < 4) {
+          entries.push({
+            lineNum,
+            name: fields[0] || '',
+            url: fields[1] || '',
+            username: fields[2] || '',
+            password: fields[3] || '',
+            selected: false,
+            error: `Incomplete data - expected 4 fields, got ${fields.length}`,
+            valid: false
+          });
+          continue;
+        }
+        
+        const [name, url, username, password] = fields;
+        let error = null;
+        let valid = true;
+        
+        // Check for duplicate
+        const key = `${url.trim()}|${username.trim()}`;
+        if (existingSet.has(key)) {
+          duplicateCount++;
+          continue; // Skip duplicates entirely
+        }
+        
+        // Validate required fields
+        if (!url || !url.trim()) {
+          error = 'Missing website URL';
+          valid = false;
+        } else if (!username || !username.trim()) {
+          error = 'Missing username/email';
+          valid = false;
+        } else if (!password || !password.trim()) {
+          error = 'Missing password';
+          valid = false;
+        } else if (!url.includes('.') && !url.includes('://')) {
+          error = 'Invalid URL format';
+          valid = false;
+        }
+        
+        entries.push({
+          lineNum,
+          name: name || '',
+          url: url || '',
+          username: username || '',
+          password: password || '',
+          selected: valid, // Auto-select valid entries
+          error,
+          valid
+        });
+        
+      } catch (e) {
+        entries.push({
+          lineNum,
+          name: '',
+          url: '',
+          username: '',
+          password: '',
+          selected: false,
+          error: `Parse error: ${e.message}`,
+          valid: false
+        });
+      }
+    }
+    
+    return { entries, duplicateCount };
+  },
+
+  /**
+   * Parse CSV line (handle quoted fields)
+   */
+  parseCSVLine(line) {
+    const fields = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        fields.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    fields.push(current);
+    return fields;
+  },
+
+  /**
+   * Render import preview list
+   */
+  renderImportPreview() {
+    const list = document.getElementById('import-preview-list');
+    const countSpan = document.getElementById('import-selection-count');
+    const importBtn = document.getElementById('btn-import-selected');
+    
+    if (!list) return;
+    
+    const selectedCount = this._importPreviewData.filter(e => e.selected).length;
+    const totalCount = this._importPreviewData.length;
+    
+    if (countSpan) {
+      countSpan.textContent = `${selectedCount} of ${totalCount} selected`;
+    }
+    
+    if (importBtn) {
+      importBtn.disabled = selectedCount === 0;
+    }
+    
+    const html = this._importPreviewData.map((entry, idx) => {
+      let hostname = entry.url;
+      try {
+        hostname = new URL(entry.url).hostname;
+      } catch (e) {}
+      
+      const itemClass = entry.valid ? 'import-preview-item' : 'import-preview-item import-preview-item-error';
+      const errorHtml = entry.error ? `<div class="import-preview-item-error-text">${escapeHtml(entry.error)}</div>` : '';
+      
+      return `
+        <div class="${itemClass}">
+          <input type="checkbox" 
+                 data-index="${idx}" 
+                 ${entry.selected ? 'checked' : ''} 
+                 ${!entry.valid ? 'disabled' : ''}>
+          <div class="import-preview-item-content">
+            <div class="import-preview-item-url">${escapeHtml(hostname || entry.url || '(no URL)')}</div>
+            <div class="import-preview-item-username">${escapeHtml(entry.username || '(no username)')}</div>
+          </div>
+          ${errorHtml}
+        </div>
+      `;
+    }).join('');
+    
+    list.innerHTML = html;
+    
+    // Add checkbox event listeners
+    list.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        const idx = parseInt(e.target.dataset.index);
+        this._importPreviewData[idx].selected = e.target.checked;
+        this.updateImportSelectionCount();
+      });
+    });
+  },
+
+  /**
+   * Update selection count and button state
+   */
+  updateImportSelectionCount() {
+    const countSpan = document.getElementById('import-selection-count');
+    const importBtn = document.getElementById('btn-import-selected');
+    
+    const selectedCount = this._importPreviewData.filter(e => e.selected).length;
+    const totalCount = this._importPreviewData.length;
+    
+    if (countSpan) {
+      countSpan.textContent = `${selectedCount} of ${totalCount} selected`;
+    }
+    
+    if (importBtn) {
+      importBtn.disabled = selectedCount === 0;
+    }
+  },
+
+  /**
+   * Show duplicate notification
+   */
+  showDuplicateNotification() {
+    const countSpan = document.getElementById('import-selection-count');
+    if (!countSpan) return;
+    
+    const originalText = countSpan.textContent;
+    countSpan.textContent = `Removed ${this._duplicateCount} duplicate${this._duplicateCount !== 1 ? 's' : ''}. These already exist.`;
+    countSpan.classList.add('import-duplicate-notification');
+    
+    setTimeout(() => {
+      countSpan.classList.add('fade-out');
+      
+      setTimeout(() => {
+        countSpan.textContent = originalText;
+        countSpan.classList.remove('import-duplicate-notification', 'fade-out');
+        countSpan.classList.add('fade-in');
+        
+        setTimeout(() => {
+          countSpan.classList.remove('fade-in');
+        }, 500);
+      }, 500);
+    }, 3000);
+  },
+
+  /**
+   * Show error when all passwords are duplicates
+   */
+  showAllDuplicatesError() {
+    // Show modal with instructions still visible
+    this.showPasswordImportModal(false);
+    
+    // Show error in the instructions section
+    const instructionsSection = document.getElementById('import-instructions');
+    if (!instructionsSection) return;
+    
+    // Create or get error message element
+    let errorMsg = instructionsSection.querySelector('.import-all-duplicates-error');
+    if (!errorMsg) {
+      errorMsg = document.createElement('div');
+      errorMsg.className = 'import-all-duplicates-error';
+      instructionsSection.insertBefore(errorMsg, instructionsSection.firstChild);
+    }
+    
+    errorMsg.textContent = 'All imported passwords already exist in Password Anvil.';
+    errorMsg.style.display = 'block';
+    errorMsg.classList.remove('fade-out');
+    
+    // Fade out after 3 seconds
+    setTimeout(() => {
+      errorMsg.classList.add('fade-out');
+      setTimeout(() => {
+        errorMsg.style.display = 'none';
+      }, 500);
+    }, 3000);
+    
+    // Reset file input
+    if (this.passwordFileInput) {
+      this.passwordFileInput.value = '';
+    }
+  },
+
+  /**
+   * Select all valid entries
+   */
+  selectAllImportEntries() {
+    this._importPreviewData.forEach(entry => {
+      if (entry.valid) {
+        entry.selected = true;
+      }
+    });
+    this.renderImportPreview();
+  },
+
+  /**
+   * Deselect all entries
+   */
+  deselectAllImportEntries() {
+    this._importPreviewData.forEach(entry => {
+      entry.selected = false;
+    });
+    this.renderImportPreview();
+  },
+
+  /**
+   * Import selected passwords
+   */
+  async importSelectedPasswords() {
+    const selected = this._importPreviewData.filter(e => e.selected && e.valid);
+    
+    if (selected.length === 0) {
+      await this.showError('No passwords selected for import', 'Import Error');
+      return;
+    }
+    
+    try {
+      const result = await window.electronAPI.passwords.importSelected(selected);
+      
+      let message = '';
+      
+      if (result.count > 0) {
+        message += `Successfully imported: ${result.count} password${result.count !== 1 ? 's' : ''}`;
+      }
+      
+      if (result.failed > 0) {
+        if (message) message += '\\n\\n';
+        message += `Failed to import: ${result.failed} password${result.failed !== 1 ? 's' : ''}`;
+      }
+      
+      // Show success or error based on result
+      if (result.count > 0 && result.failed === 0) {
+        await this.showSuccess(message, 'Import Successful');
+      } else if (result.count === 0 && result.failed > 0) {
+        await this.showError(message, 'Import Failed');
+      } else {
+        await this.showNotification('Import Complete', message, 'info');
+      }
+      
+      this.hidePasswordImportModal();
+      
+      // Reload passwords if any were imported
+      if (result.count > 0) {
+        await this.loadPasswords();
+      }
+    } catch (err) {
+      console.error('[PasswordManager] Failed to import selected passwords:', err);
+      await this.showError('Failed to import passwords: ' + err.message, 'Import Error');
+    }
+  },
+
+  /**
+   * OLD: Import passwords from CSV (kept for reference, now unused)
+   */
+  async _oldImportPasswordsCSV(file) {
     if (!file) return;
     
     const reader = new FileReader();
@@ -260,15 +703,47 @@ export const PasswordManagerMixin = {
         const csvData = e.target.result;
         const result = await window.electronAPI.passwords.importCSV(csvData);
         
-        if (result.success) {
-          alert(`Successfully imported ${result.count} passwords`);
+        // Build result message
+        let message = '';
+        
+        if (result.count > 0) {
+          message += `✓ Successfully imported: ${result.count} password${result.count !== 1 ? 's' : ''}`;
+        }
+        
+        if (result.failed > 0) {
+          if (message) message += '\n';
+          message += `✗ Failed to import: ${result.failed} password${result.failed !== 1 ? 's' : ''}`;
+          
+          // Add detailed error information
+          if (result.failedEntries && result.failedEntries.length > 0) {
+            message += '\n\nError Details:';
+            
+            // Show first 10 errors, or all if less than 10
+            const errorsToShow = result.failedEntries.slice(0, 10);
+            errorsToShow.forEach((entry, idx) => {
+              message += `\n${idx + 1}. Line ${entry.line}: ${entry.username} (${entry.url})`;
+              message += `\n   Reason: ${entry.reason}`;
+            });
+            
+            if (result.failedEntries.length > 10) {
+              message += `\n... and ${result.failedEntries.length - 10} more errors`;
+            }
+          }
+        }
+        
+        if (!result.count && !result.failed) {
+          message = 'No passwords found in file. Please check your CSV format.\n\nExpected format: name,url,username,password';
+        }
+        
+        alert(message);
+        
+        // Reload passwords if any were imported
+        if (result.count > 0) {
           await this.loadPasswords();
-        } else {
-          alert('Failed to import passwords: ' + (result.error || 'Unknown error'));
         }
       } catch (err) {
         console.error('[PasswordManager] Failed to import CSV:', err);
-        alert('Failed to import passwords');
+        alert('Failed to import passwords: ' + err.message);
       }
     };
     reader.readAsText(file);

@@ -122,6 +122,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     add: (url, username, password) => ipcRenderer.invoke('passwords-add', url, username, password),
     update: (id, url, username, password) => ipcRenderer.invoke('passwords-update', id, url, username, password),
     delete: (id) => ipcRenderer.invoke('passwords-delete', id),
-    importCSV: (csvData) => ipcRenderer.invoke('passwords-import-csv', csvData)
+    importCSV: (csvData) => ipcRenderer.invoke('passwords-import-csv', csvData),
+    importSelected: (entries) => ipcRenderer.invoke('passwords-import-selected', entries),
+    deleteAll: () => ipcRenderer.invoke('passwords-delete-all')
   }
 });

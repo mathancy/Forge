@@ -39,6 +39,12 @@ export const WebviewEventsMixin = {
         self.urlInput.value = e.url;
         self.updateSecurityIndicator(e.url);
         self.updateNavigationButtons();
+        
+        // Hide welcome page when navigating
+        if (e.url && e.url !== 'about:blank') {
+          self.welcomePage.classList.add('hidden');
+          self.welcomePage.classList.remove('blank-tab');
+        }
       }
       
       if (!isInternalUrl(e.url)) {

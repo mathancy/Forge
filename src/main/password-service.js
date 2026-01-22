@@ -216,32 +216,121 @@ class PasswordService {
     importFromCSV(csvData) {
         const lines = csvData.split('\n');
         let imported = 0;
-        let errors = 0;
+        const failedEntries = [];
         
         // Skip header row (name,url,username,password)
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
             
+            const lineNum = i + 1; // For user-friendly line numbers
+            
             try {
                 // Parse CSV line (handle quoted fields)
                 const fields = this.parseCSVLine(line);
                 
-                if (fields.length >= 4) {
-                    const [name, url, username, password] = fields;
-                    
-                    if (url && username && password) {
-                        this.addPassword(url, username, password);
-                        imported++;
-                    }
+                if (fields.length < 4) {
+                    failedEntries.push({
+                        line: lineNum,
+                        username: fields[2] || '(empty)',
+                        url: fields[1] || '(empty)',
+                        reason: `Incomplete data - expected 4 fields, got ${fields.length}`
+                    });
+                    continue;
                 }
+                
+                const [name, url, username, password] = fields;
+                
+                // Validate required fields
+                if (!url || !url.trim()) {
+                    failedEntries.push({
+                        line: lineNum,
+                        username: username || '(empty)',
+                        url: '(empty)',
+                        reason: 'Missing website URL'
+                    });
+                    continue;
+                }
+                
+                if (!username || !username.trim()) {
+                    failedEntries.push({
+                        line: lineNum,
+                        username: '(empty)',
+                        url: url,
+                        reason: 'Missing username/email'
+                    });
+                    continue;
+                }
+                
+                if (!password || !password.trim()) {
+                    failedEntries.push({
+                        line: lineNum,
+                        username: username,
+                        url: url,
+                        reason: 'Missing password'
+                    });
+                    continue;
+                }
+                
+                // Validate URL format (basic check)
+                if (!url.includes('.') && !url.includes('://')) {
+                    failedEntries.push({
+                        line: lineNum,
+                        username: username,
+                        url: url,
+                        reason: 'Invalid URL format'
+                    });
+                    continue;
+                }
+                
+                // All validations passed, add the password
+                this.addPassword(url.trim(), username.trim(), password);
+                imported++;
+                
             } catch (e) {
                 console.error('Error importing password line:', e);
-                errors++;
+                failedEntries.push({
+                    line: lineNum,
+                    username: '(unknown)',
+                    url: '(unknown)',
+                    reason: `Parse error: ${e.message}`
+                });
             }
         }
         
-        return { imported, errors };
+        return { 
+            success: imported > 0, 
+            count: imported, 
+            imported,
+            failed: failedEntries.length,
+            failedEntries
+        };
+    }
+
+    importSelected(entries) {
+        let imported = 0;
+        let failed = 0;
+        
+        entries.forEach(entry => {
+            try {
+                if (entry.url && entry.username && entry.password) {
+                    this.addPassword(entry.url.trim(), entry.username.trim(), entry.password);
+                    imported++;
+                } else {
+                    failed++;
+                }
+            } catch (e) {
+                console.error('Error importing selected password:', e);
+                failed++;
+            }
+        });
+        
+        return { 
+            success: imported > 0, 
+            count: imported, 
+            imported,
+            failed
+        };
     }
 
     parseCSVLine(line) {

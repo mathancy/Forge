@@ -662,6 +662,45 @@ ipcMain.handle('passwords-import-csv', (event, csvData) => {
   return passwordService.importFromCSV(csvData);
 });
 
+ipcMain.handle('passwords-import-selected', (event, entries) => {
+  return passwordService.importSelected(entries);
+});
+
+ipcMain.handle('passwords-delete-all', () => {
+  try {
+    const fs = require('fs');
+    const dbPath = path.join(app.getPath('userData'), 'passwords.db');
+    const keyPath = path.join(app.getPath('userData'), 'password.key');
+    
+    // Close the database connection first to release the lock
+    passwordService.close();
+    
+    // Delete both files if they exist
+    if (fs.existsSync(dbPath)) {
+      fs.unlinkSync(dbPath);
+    }
+    if (fs.existsSync(keyPath)) {
+      fs.unlinkSync(keyPath);
+    }
+    
+    // Reinitialize the password service with fresh database
+    passwordService.initialize();
+    
+    return { success: true };
+  } catch (err) {
+    console.error('Error deleting passwords:', err);
+    
+    // Try to reinitialize even if deletion failed partially
+    try {
+      passwordService.initialize();
+    } catch (reinitErr) {
+      console.error('Error reinitializing password service:', reinitErr);
+    }
+    
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('create-password-anvil-window', () => {
   const passwordWindow = new BrowserWindow({
     width: 900,

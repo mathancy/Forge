@@ -19,6 +19,7 @@ import { WindowControlsMixin } from './modules/window-controls.js';
 import { KeyboardShortcutsMixin } from './modules/keyboard-shortcuts.js';
 import { BrightnessControlMixin } from './modules/brightness-control.js';
 import { WelcomeParticlesMixin } from './modules/welcome-particles.js';
+import { ModalSystemMixin } from './modules/modal-system.js';
 
 console.log('[Forge] Loading modular renderer...');
 
@@ -97,6 +98,7 @@ class ForgeBrowser {
     this.initBrightnessControl();
     this.initKeyboardShortcuts();
     this.initWelcomeParticles();
+    this.initModalSystem();
     
     await this.initAdBlocker();
     await this.initFavorites();
@@ -190,6 +192,7 @@ class ForgeBrowser {
     this.btnClosePasswordAnvil = document.getElementById('btn-close-password-anvil');
     this.btnAddPassword = document.getElementById('btn-add-password');
     this.btnImportPasswords = document.getElementById('btn-import-passwords');
+    this.btnDeleteAllPasswords = document.getElementById('btn-delete-all-passwords');
     this.passwordModal = document.getElementById('password-modal');
     this.passwordModalTitle = document.getElementById('password-modal-title');
     this.btnClosePasswordModal = document.getElementById('btn-close-password-modal');
@@ -200,6 +203,15 @@ class ForgeBrowser {
     this.passwordUsernameInput = document.getElementById('password-username');
     this.passwordPasswordInput = document.getElementById('password-password');
     this.passwordFileInput = document.getElementById('password-file-input');
+    
+    // Password Import Modal
+    this.passwordImportModal = document.getElementById('password-import-modal');
+    this.btnCloseImportModal = document.getElementById('btn-close-import-modal');
+    this.btnSelectImportFile = document.getElementById('btn-select-import-file');
+    this.btnSelectAllImport = document.getElementById('btn-select-all-import');
+    this.btnDeselectAllImport = document.getElementById('btn-deselect-all-import');
+    this.btnCancelImport = document.getElementById('btn-cancel-import');
+    this.btnImportSelected = document.getElementById('btn-import-selected');
     
     // Chrome Import panel
     this.chromeImportPanel = document.getElementById('chrome-import-panel');
@@ -334,13 +346,23 @@ class ForgeBrowser {
     // Password Anvil
     if (this.btnClosePasswordAnvil) this.btnClosePasswordAnvil.addEventListener('click', () => this.hidePasswordAnvilPanel());
     if (this.btnAddPassword) this.btnAddPassword.addEventListener('click', () => this.showPasswordModal());
-    if (this.btnImportPasswords) this.btnImportPasswords.addEventListener('click', () => this.passwordFileInput?.click());
+    if (this.btnImportPasswords) this.btnImportPasswords.addEventListener('click', () => this.showPasswordImportModal());
+    if (this.btnDeleteAllPasswords) this.btnDeleteAllPasswords.addEventListener('click', () => this.deleteAllPasswords());
     if (this.btnClosePasswordModal) this.btnClosePasswordModal.addEventListener('click', () => this.hidePasswordModal());
     if (this.btnCancelPassword) this.btnCancelPassword.addEventListener('click', () => this.hidePasswordModal());
     if (this.btnSavePassword) this.btnSavePassword.addEventListener('click', () => this.savePassword());
     if (this.passwordSearch) this.passwordSearch.addEventListener('input', () => this.filterPasswords());
     if (this.passwordFileInput) this.passwordFileInput.addEventListener('change', (e) => this.importPasswordsCSV(e.target.files[0]));
     if (this.passwordModal) this.passwordModal.addEventListener('click', (e) => { if (e.target === this.passwordModal) this.hidePasswordModal(); });
+    
+    // Password Import Modal event listeners
+    if (this.btnCloseImportModal) this.btnCloseImportModal.addEventListener('click', () => this.hidePasswordImportModal());
+    if (this.btnSelectImportFile) this.btnSelectImportFile.addEventListener('click', () => this.passwordFileInput?.click());
+    if (this.btnSelectAllImport) this.btnSelectAllImport.addEventListener('click', () => this.selectAllImportEntries());
+    if (this.btnDeselectAllImport) this.btnDeselectAllImport.addEventListener('click', () => this.deselectAllImportEntries());
+    if (this.btnCancelImport) this.btnCancelImport.addEventListener('click', () => this.hidePasswordImportModal());
+    if (this.btnImportSelected) this.btnImportSelected.addEventListener('click', () => this.importSelectedPasswords());
+    if (this.passwordImportModal) this.passwordImportModal.addEventListener('click', (e) => { if (e.target === this.passwordImportModal) this.hidePasswordImportModal(); });
     
     // Favorites
     if (this.btnFavorites) this.btnFavorites.addEventListener('click', () => this.toggleFavoritesPanel());
@@ -425,6 +447,7 @@ applyMixin(ForgeBrowser, WindowControlsMixin);    // Window minimize/maximize/cl
 applyMixin(ForgeBrowser, KeyboardShortcutsMixin); // Keyboard shortcuts
 applyMixin(ForgeBrowser, BrightnessControlMixin); // Brightness slider
 applyMixin(ForgeBrowser, WelcomeParticlesMixin);  // Welcome page particles
+applyMixin(ForgeBrowser, ModalSystemMixin);       // Modal dialogs and notifications
 
 // Start the browser
 console.log('[Forge] Creating browser instance...');

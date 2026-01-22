@@ -269,8 +269,13 @@
       </div>
       <div class="panel-toolbar">
         <input type="text" id="password-search" placeholder="Search passwords...">
-        <button id="btn-add-password" class="panel-btn" title="Add new password">Add New</button>
+        <button id="btn-add-password" class="panel-btn panel-btn-icon" title="Add new password">
+          <img src="forge-asset://ui-icons/plus.svg" alt="Add new">
+        </button>
         <button id="btn-import-passwords" class="panel-btn" title="Import from CSV">Import</button>
+        <button id="btn-delete-all-passwords" class="panel-btn panel-btn-danger" title="Delete all">
+          <img src="forge-asset://ui-icons/delete.svg" alt="Delete all">
+        </button>
       </div>
       <div id="password-list" class="panel-list">
         <!-- Password items will be dynamically added here -->
@@ -311,6 +316,93 @@
     </div>
 
     <input type="file" id="password-file-input" accept=".csv" style="display: none;">
+
+    <!-- Password Import Modal -->
+    <div id="password-import-modal" class="modal-overlay hidden">
+      <div class="modal-dialog modal-dialog-large">
+        <div class="modal-header">
+          <h3>Import Passwords</h3>
+          <button id="btn-close-import-modal" class="panel-close-btn" title="Close">
+            <svg width="14" height="14" viewBox="0 0 14 14">
+              <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <!-- Instructions -->
+          <div id="import-instructions" class="import-section">
+            <h4>How to Export Passwords</h4>
+            <div class="import-instructions-list">
+              <div class="import-browser-instructions">
+                <strong>Chrome / Edge / Brave / Opera:</strong>
+                <ol>
+                  <li>Open Settings → Passwords</li>
+                  <li>Click the three dots (⋮) next to "Saved Passwords"</li>
+                  <li>Select "Export passwords"</li>
+                  <li>Save the CSV file</li>
+                </ol>
+              </div>
+            </div>
+            <div class="import-note">
+              <strong>Note:</strong> CSV format should have columns: name, url, username, password
+            </div>
+            <button id="btn-select-import-file" class="panel-btn primary">Select File to Import</button>
+          </div>
+
+          <!-- Preview Section -->
+          <div id="import-preview" class="import-section hidden">
+            <div class="import-preview-header">
+              <h4>Select Passwords to Import</h4>
+              <div class="import-preview-actions">
+                <button id="btn-select-all-import" class="panel-btn-link">Select All</button>
+                <button id="btn-deselect-all-import" class="panel-btn-link">Deselect All</button>
+              </div>
+            </div>
+            <div id="import-preview-list" class="import-preview-list">
+              <!-- Preview items will be dynamically added here -->
+            </div>
+            <div class="import-preview-footer">
+              <span id="import-selection-count">0 of 0 selected</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-cancel-import" class="panel-btn">Cancel</button>
+          <button id="btn-import-selected" class="panel-btn primary" disabled>Import Selected</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmation-modal" class="forge-modal hidden">
+      <div class="forge-modal-content">
+        <div class="forge-modal-header">
+          <h3 id="confirmation-modal-title">Confirm Action</h3>
+        </div>
+        <div class="forge-modal-body">
+          <p id="confirmation-modal-message">Are you sure?</p>
+        </div>
+        <div class="forge-modal-footer">
+          <button id="confirmation-modal-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+          <button id="confirmation-modal-confirm" class="modal-btn modal-btn-primary">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Modal -->
+    <div id="notification-modal" class="forge-modal hidden">
+      <div class="forge-modal-content forge-modal-notification">
+        <div class="forge-modal-header">
+          <h3 id="notification-modal-title">Notification</h3>
+        </div>
+        <div class="forge-modal-body">
+          <p id="notification-modal-message">Action completed successfully.</p>
+        </div>
+        <div class="forge-modal-footer">
+          <button id="notification-modal-ok" class="modal-btn modal-btn-primary">OK</button>
+        </div>
+      </div>
+    </div>
 
     <!-- History Panel -->
     <div id="history-panel" class="panel hidden">

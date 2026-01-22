@@ -3,22 +3,19 @@
 
 export const WelcomeParticlesMixin = {
   initWelcomeParticles() {
+    // Initialize particles for welcome page
     this.particleCanvas = document.getElementById('particle-canvas');
-    if (!this.particleCanvas) return;
-
-    this.particleCtx = this.particleCanvas.getContext('2d', { alpha: true });
-    this.particles = [];
-    this.particleAnimationId = null;
-    
-    // Resize canvas to match container
-    this.resizeParticleCanvas();
-    window.addEventListener('resize', () => this.resizeParticleCanvas());
-    
-    // Initialize particles
-    this.initParticles();
-    
-    // Start animation
-    this.animateParticles();
+    if (this.particleCanvas) {
+      this.particleCtx = this.particleCanvas.getContext('2d', { alpha: true });
+      this.particles = [];
+      this.particleAnimationId = null;
+      
+      this.resizeParticleCanvas();
+      window.addEventListener('resize', () => this.resizeParticleCanvas());
+      
+      this.initParticles();
+      this.animateParticles();
+    }
   },
 
   resizeParticleCanvas() {
@@ -28,6 +25,15 @@ export const WelcomeParticlesMixin = {
     
     this.particleCanvas.width = welcomePage.offsetWidth;
     this.particleCanvas.height = welcomePage.offsetHeight;
+  },
+
+  resizeBlankParticleCanvas() {
+    if (!this.blankParticleCanvas) return;
+    const blankTabBg = document.getElementById('blank-tab-background');
+    if (!blankTabBg) return;
+    
+    this.blankParticleCanvas.width = blankTabBg.offsetWidth;
+    this.blankParticleCanvas.height = blankTabBg.offsetHeight;
   },
 
   initParticles() {
