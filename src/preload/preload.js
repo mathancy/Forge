@@ -61,6 +61,24 @@ contextBridge.exposeInMainWorld('forgeAPI', {
     remove: (slotIndex) => ipcRenderer.invoke('favorites-remove', slotIndex)
   },
   
+  // Bookmarks
+  bookmarks: {
+    get: () => ipcRenderer.invoke('bookmarks-get'),
+    setBarEnabled: (enabled) => ipcRenderer.invoke('bookmarks-set-bar-enabled', enabled),
+    isBarEnabled: () => ipcRenderer.invoke('bookmarks-is-bar-enabled'),
+    add: ({ url, title, icon, folderId }) => ipcRenderer.invoke('bookmarks-add', { url, title, icon, folderId }),
+    createFolder: ({ name, parentFolderId }) => ipcRenderer.invoke('bookmarks-create-folder', { name, parentFolderId }),
+    remove: (itemId) => ipcRenderer.invoke('bookmarks-remove', itemId),
+    update: (itemId, updates) => ipcRenderer.invoke('bookmarks-update', itemId, updates),
+    move: (itemId, targetFolderId, targetIndex) => ipcRenderer.invoke('bookmarks-move', itemId, targetFolderId, targetIndex),
+    isBookmarked: (url) => ipcRenderer.invoke('bookmarks-is-bookmarked', url),
+    findByUrl: (url) => ipcRenderer.invoke('bookmarks-find-by-url', url),
+    getFolders: () => ipcRenderer.invoke('bookmarks-get-folders'),
+    import: (htmlContent) => ipcRenderer.invoke('bookmarks-import', htmlContent),
+    saveIcon: (bookmarkId, base64Data, mimeType) => ipcRenderer.invoke('bookmarks-save-icon', bookmarkId, base64Data, mimeType),
+    deleteIcon: (bookmarkId) => ipcRenderer.invoke('bookmarks-delete-icon', bookmarkId)
+  },
+  
   // URL Autocomplete
   getUrlSuggestions: (query) => ipcRenderer.invoke('get-url-suggestions', query),
   

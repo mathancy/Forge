@@ -63,9 +63,14 @@
           </svg>
         </div>
         <input type="text" id="url-input" placeholder="Search or enter URL" autocomplete="off" spellcheck="false">
-        <div id="ad-counter" class="ad-counter hidden" title="Ads blocked on this page">
-          <img src="forge-asset://ui-icons/shield.svg" alt="" width="12" height="12">
-          <span id="ad-counter-value">0</span>
+        <div class="url-actions">
+          <div id="ad-counter" class="ad-counter hidden" title="Ads blocked on this page">
+            <img src="forge-asset://ui-icons/shield.svg" alt="" width="12" height="12">
+            <span id="ad-counter-value">0</span>
+          </div>
+          <button id="btn-bookmark" class="url-action-btn" title="Bookmark this page">
+            <img id="bookmark-icon" class="url-action-icon" src="forge-asset://ui-icons/bookmark.svg" alt="Bookmark" width="16" height="16">
+          </button>
         </div>
         <div id="url-suggestions" class="url-suggestions hidden"></div>
       </div>
@@ -83,6 +88,51 @@
             <circle cx="8" cy="13" r="1.5" fill="currentColor"/>
           </svg>
         </button>
+      </div>
+    </div>
+
+    <!-- Bookmark Popup Overlay -->
+    <div id="bookmark-popup-overlay" class="modal-overlay hidden"></div>
+
+    <!-- Bookmark Popup -->
+    <div id="bookmark-popup" class="bookmark-popup hidden">
+      <div class="bookmark-popup-header">
+        <span class="bookmark-popup-title">Add Bookmark</span>
+        <button id="bookmark-popup-close" class="bookmark-popup-close" title="Close">&times;</button>
+      </div>
+      <div class="bookmark-popup-content">
+        <div class="bookmark-field">
+          <label for="bookmark-name">Name</label>
+          <input type="text" id="bookmark-name" placeholder="Bookmark name">
+        </div>
+        <div class="bookmark-field">
+          <label for="bookmark-url">URL</label>
+          <input type="text" id="bookmark-url" placeholder="URL" readonly>
+        </div>
+        <div class="bookmark-field">
+          <label for="bookmark-folder">Folder</label>
+          <select id="bookmark-folder">
+            <option value="">Bookmarks Bar</option>
+          </select>
+        </div>
+        <div class="bookmark-field bookmark-new-folder hidden" id="new-folder-field">
+          <label for="bookmark-new-folder-name">New Folder Name</label>
+          <input type="text" id="bookmark-new-folder-name" placeholder="Folder name">
+        </div>
+      </div>
+      <div class="bookmark-popup-actions">
+        <button id="bookmark-new-folder-btn" class="bookmark-btn bookmark-btn-secondary">New Folder</button>
+        <div class="bookmark-popup-actions-right">
+          <button id="bookmark-remove-btn" class="bookmark-btn bookmark-btn-danger hidden">Remove</button>
+          <button id="bookmark-save-btn" class="bookmark-btn bookmark-btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bookmarks Bar -->
+    <div id="bookmarks-bar" class="bookmarks-bar hidden">
+      <div class="bookmarks-container" id="bookmarks-container">
+        <!-- Bookmarks will be added here dynamically -->
       </div>
     </div>
 
@@ -168,6 +218,118 @@
       </div>
     </div>
 
+    <!-- Bookmark Context Menu -->
+    <div id="bookmark-context-menu" class="context-menu hidden">
+      <div class="context-menu-item" data-action="bookmark-open">
+        <img class="menu-icon" src="forge-asset://ui-icons/globe.svg" width="16" height="16" alt="">
+        Open
+      </div>
+      <div class="context-menu-item" data-action="bookmark-open-new-tab">
+        <img class="menu-icon" src="forge-asset://ui-icons/plus.svg" width="16" height="16" alt="">
+        Open in New Tab
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="bookmark-edit">
+        <img class="menu-icon" src="forge-asset://ui-icons/edit.svg" width="16" height="16" alt="">
+        Edit
+      </div>
+      <div class="context-menu-item" data-action="bookmark-move">
+        <img class="menu-icon" src="forge-asset://ui-icons/folder.svg" width="16" height="16" alt="">
+        Move to Folder
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item danger" data-action="bookmark-delete">
+        <img class="menu-icon" src="forge-asset://ui-icons/delete.svg" width="16" height="16" alt="">
+        Delete
+      </div>
+    </div>
+
+    <!-- Bookmarks Bar Context Menu (right-click on empty space) -->
+    <div id="bookmarks-bar-context-menu" class="context-menu hidden">
+      <div class="context-menu-item" data-action="bar-add-folder">
+        <img class="menu-icon" src="forge-asset://ui-icons/folder.svg" width="16" height="16" alt="">
+        Add New Folder
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="bar-import">
+        <img class="menu-icon" src="forge-asset://ui-icons/import.svg" width="16" height="16" alt="">
+        Import Bookmarks
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="bar-hide">
+        <img class="menu-icon" src="forge-asset://ui-icons/eye-off.svg" width="16" height="16" alt="">
+        Hide Bookmarks Bar
+      </div>
+    </div>
+
+    <!-- Folder Context Menu -->
+    <div id="folder-context-menu" class="context-menu hidden">
+      <div class="context-menu-item" data-action="folder-open-all">
+        <img class="menu-icon" src="forge-asset://ui-icons/tabs.svg" width="16" height="16" alt="">
+        Open All in New Tabs
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-action="folder-rename">
+        <img class="menu-icon" src="forge-asset://ui-icons/edit.svg" width="16" height="16" alt="">
+        Rename Folder
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item danger" data-action="folder-delete">
+        <img class="menu-icon" src="forge-asset://ui-icons/delete.svg" width="16" height="16" alt="">
+        Delete Folder
+      </div>
+    </div>
+
+    <!-- Add Folder Modal -->
+    <div id="add-folder-overlay" class="modal-overlay hidden"></div>
+    <div id="add-folder-modal" class="modal-container add-folder-modal-container hidden">
+      <div class="modal-header">
+        <h2 class="modal-title">Add New Folder</h2>
+      </div>
+      <div class="modal-content">
+        <div class="bookmark-field">
+          <label for="add-folder-name">Folder Name</label>
+          <input type="text" id="add-folder-name" placeholder="Enter folder name">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="add-folder-cancel-btn" class="panel-btn">Cancel</button>
+        <button id="add-folder-save-btn" class="panel-btn primary">Create Folder</button>
+      </div>
+    </div>
+
+    <!-- Bookmark Edit Modal -->
+    <div id="bookmark-edit-overlay" class="modal-overlay hidden"></div>
+    <div id="bookmark-edit-modal" class="modal-container bookmark-edit-modal-container hidden">
+      <div class="modal-header">
+        <h2 class="modal-title">Edit Bookmark</h2>
+      </div>
+      <div class="modal-content">
+        <div class="bookmark-edit-icon-section">
+          <div class="bookmark-edit-icon-preview" id="bookmark-edit-icon-preview">
+            <img src="../assets/ui-icons/globe.svg" alt="Bookmark icon">
+          </div>
+          <div class="bookmark-edit-icon-actions">
+            <button id="bookmark-edit-upload-btn" class="bookmark-btn bookmark-btn-secondary">Upload Icon</button>
+            <button id="bookmark-edit-reset-btn" class="bookmark-btn bookmark-btn-secondary">Reset to Favicon</button>
+            <input type="file" id="bookmark-edit-icon-input" accept=".png,.svg,.jpg,.jpeg,.ico,.webp" style="display: none;">
+          </div>
+        </div>
+        <div class="bookmark-field">
+          <label for="bookmark-edit-title">Title</label>
+          <input type="text" id="bookmark-edit-title" placeholder="Bookmark title">
+        </div>
+        <div class="bookmark-field">
+          <label for="bookmark-edit-url">URL</label>
+          <input type="text" id="bookmark-edit-url" placeholder="https://example.com">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="bookmark-edit-cancel-btn" class="bookmark-btn bookmark-btn-secondary">Cancel</button>
+        <button id="bookmark-edit-save-btn" class="bookmark-btn bookmark-btn-primary">Save Changes</button>
+      </div>
+    </div>
+
     <!-- Context Menu Overlay (for capturing clicks outside context menus) -->
     <div id="context-menu-overlay" class="context-menu-overlay hidden"></div>
 
@@ -200,6 +362,11 @@
         <img class="menu-icon" src="../../assets/ui-icons/heart.svg" width="16" height="16" alt="">
         Favorites
         <span class="menu-toggle" id="favorites-toggle"></span>
+      </div>
+      <div class="context-menu-item has-toggle" data-action="bookmarks-bar">
+        <img class="menu-icon" src="../../assets/ui-icons/bookmark.svg" width="16" height="16" alt="">
+        Bookmarks
+        <span class="menu-toggle" id="bookmarks-bar-toggle"></span>
       </div>
       <div class="context-menu-item has-toggle" data-action="adblock">
         <img class="menu-icon" src="../../assets/ui-icons/shield.svg" width="16" height="16" alt="">
@@ -408,6 +575,23 @@
       </div>
     </div>
 
+    <!-- Prompt Modal -->
+    <div id="prompt-modal" class="modal-container prompt-modal-container hidden">
+      <div class="modal-header">
+        <h2 class="modal-title" id="prompt-modal-title">Enter Value</h2>
+      </div>
+      <div class="modal-content">
+        <p id="prompt-modal-message" class="prompt-modal-message">Please enter a value:</p>
+        <div class="prompt-field">
+          <input type="text" id="prompt-modal-input" placeholder="">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="prompt-modal-cancel" class="bookmark-btn bookmark-btn-secondary">Cancel</button>
+        <button id="prompt-modal-confirm" class="bookmark-btn bookmark-btn-primary">OK</button>
+      </div>
+    </div>
+
     <!-- Themes Modal -->
     <div id="themes-modal" class="forge-modal hidden">
       <div class="forge-modal-content">
@@ -480,6 +664,19 @@
               </div>
               <div class="theme-preview">
                 <div class="theme-colors-gradient rustveil-gradient"></div>
+              </div>
+              <div class="theme-checkmark">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M16.6668 5L7.50016 14.1667L3.3335 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+            <div class="theme-option" data-theme="sakura-shadow">
+              <div class="theme-info">
+                <div class="theme-name">Sakura Shadow</div>
+              </div>
+              <div class="theme-preview">
+                <div class="theme-colors-gradient sakura-shadow-gradient"></div>
               </div>
               <div class="theme-checkmark">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">

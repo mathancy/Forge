@@ -40,6 +40,11 @@ export const WebviewEventsMixin = {
         self.updateSecurityIndicator(e.url);
         self.updateNavigationButtons();
         
+        // Update bookmark icon state
+        if (self.updateBookmarkIconState) {
+          self.updateBookmarkIconState(e.url);
+        }
+        
         // Hide welcome page when navigating
         if (e.url && e.url !== 'about:blank') {
           self.welcomePage.classList.add('hidden');
@@ -80,6 +85,11 @@ export const WebviewEventsMixin = {
         self.urlInput.value = e.url;
         self.updateSecurityIndicator(e.url);
         self.updateNavigationButtons();
+        
+        // Update bookmark icon state
+        if (self.updateBookmarkIconState) {
+          self.updateBookmarkIconState(e.url);
+        }
       }
       
       if (e.isMainFrame && !isInternalUrl(e.url)) {

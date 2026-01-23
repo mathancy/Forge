@@ -21,6 +21,7 @@ import { BrightnessControlMixin } from './modules/brightness-control.js';
 import { WelcomeParticlesMixin } from './modules/welcome-particles.js';
 import { ModalSystemMixin } from './modules/modal-system.js';
 import { ThemesMixin } from './modules/themes.js';
+import { BookmarksMixin } from './modules/bookmarks.js';
 
 console.log('[Forge] Loading modular renderer...');
 
@@ -101,6 +102,7 @@ class ForgeBrowser {
     this.initWelcomeParticles();
     this.initModalSystem();
     this.initThemes();
+    this.initBookmarksBar();
     
     await this.initAdBlocker();
     await this.initFavorites();
@@ -171,9 +173,35 @@ class ForgeBrowser {
     this.tabContextMenu = document.getElementById('tab-context-menu');
     this.contextMenuTabId = null;
     this.webviewContextMenu = document.getElementById('webview-context-menu');
+    this.bookmarkContextMenu = document.getElementById('bookmark-context-menu');
+    this.bookmarksBarContextMenu = document.getElementById('bookmarks-bar-context-menu');
+    this.folderContextMenu = document.getElementById('folder-context-menu');
     this.contextMenuOverlay = document.getElementById('context-menu-overlay');
     this.contextMenuWebview = null;
     this.contextMenuParams = null;
+    this.contextMenuBookmark = null; // Currently right-clicked bookmark
+    this.contextMenuFolder = null; // Currently right-clicked folder
+    
+    // Add Folder Modal
+    this.addFolderModal = document.getElementById('add-folder-modal');
+    this.addFolderOverlay = document.getElementById('add-folder-overlay');
+    this.addFolderName = document.getElementById('add-folder-name');
+    this.addFolderCancelBtn = document.getElementById('add-folder-cancel-btn');
+    this.addFolderSaveBtn = document.getElementById('add-folder-save-btn');
+    
+    // Bookmark Edit Modal
+    this.bookmarkEditModal = document.getElementById('bookmark-edit-modal');
+    this.bookmarkEditOverlay = document.getElementById('bookmark-edit-overlay');
+    this.bookmarkEditIconPreview = document.getElementById('bookmark-edit-icon-preview');
+    this.bookmarkEditIconInput = document.getElementById('bookmark-edit-icon-input');
+    this.bookmarkEditTitle = document.getElementById('bookmark-edit-title');
+    this.bookmarkEditUrl = document.getElementById('bookmark-edit-url');
+    this.bookmarkEditUploadBtn = document.getElementById('bookmark-edit-upload-btn');
+    this.bookmarkEditResetBtn = document.getElementById('bookmark-edit-reset-btn');
+    this.bookmarkEditCancelBtn = document.getElementById('bookmark-edit-cancel-btn');
+    this.bookmarkEditSaveBtn = document.getElementById('bookmark-edit-save-btn');
+    this.editingBookmark = null; // Bookmark being edited
+    this.editingBookmarkNewIcon = null; // New icon data if uploaded
     
     // Main menu
     this.btnMenu = document.getElementById('btn-menu');
@@ -257,6 +285,29 @@ class ForgeBrowser {
     
     // Hide favorites button until settings load
     if (this.btnFavorites) this.btnFavorites.style.display = 'none';
+    
+    // Bookmarks Bar
+    this.bookmarksBar = document.getElementById('bookmarks-bar');
+    this.bookmarksBarToggle = document.getElementById('bookmarks-bar-toggle');
+    this.bookmarksContainer = document.getElementById('bookmarks-container');
+    this.bookmarksBarEnabled = false;
+    
+    // Bookmark Button & Popup
+    this.btnBookmark = document.getElementById('btn-bookmark');
+    this.bookmarkIcon = document.getElementById('bookmark-icon');
+    this.bookmarkPopup = document.getElementById('bookmark-popup');
+    this.bookmarkPopupOverlay = document.getElementById('bookmark-popup-overlay');
+    this.bookmarkPopupClose = document.getElementById('bookmark-popup-close');
+    this.bookmarkNameInput = document.getElementById('bookmark-name');
+    this.bookmarkUrlInput = document.getElementById('bookmark-url');
+    this.bookmarkFolderSelect = document.getElementById('bookmark-folder');
+    this.bookmarkNewFolderField = document.getElementById('new-folder-field');
+    this.bookmarkNewFolderName = document.getElementById('bookmark-new-folder-name');
+    this.bookmarkNewFolderBtn = document.getElementById('bookmark-new-folder-btn');
+    this.bookmarkRemoveBtn = document.getElementById('bookmark-remove-btn');
+    this.bookmarkSaveBtn = document.getElementById('bookmark-save-btn');
+    this.bookmarksData = { bar: [], folders: {} };
+    this.editingBookmark = null;
     
     // Ad-blocker
     this.adblockToggle = document.getElementById('adblock-toggle');
@@ -375,6 +426,46 @@ class ForgeBrowser {
     if (this.btnCancelFavorite) this.btnCancelFavorite.addEventListener('click', () => this.hideFavoritesDialog());
     if (this.btnSaveFavorite) this.btnSaveFavorite.addEventListener('click', () => this.saveFavorite());
     
+    // Bookmarks Bar
+    if (this.bookmarksBarToggle) {
+      this.bookmarksBarToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleBookmarksBar();
+      });
+    }
+    
+    // Bookmark Button & Popup
+    if (this.btnBookmark) {
+      this.btnBookmark.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleBookmarkPopup();
+      });
+    }
+    if (this.bookmarkPopupClose) {
+      this.bookmarkPopupClose.addEventListener('click', () => this.hideBookmarkPopup());
+      if (this.bookmarkPopupOverlay) {
+        this.bookmarkPopupOverlay.addEventListener('click', () => this.hideBookmarkPopup());
+      }
+    }
+    if (this.bookmarkNewFolderBtn) {
+      this.bookmarkNewFolderBtn.addEventListener('click', () => this.toggleNewFolderField());
+    }
+    if (this.bookmarkRemoveBtn) {
+      this.bookmarkRemoveBtn.addEventListener('click', () => this.removeCurrentBookmark());
+    }
+    if (this.bookmarkSaveBtn) {
+      this.bookmarkSaveBtn.addEventListener('click', () => this.saveBookmark());
+    }
+    
+    // Close bookmark popup when clicking outside
+    document.addEventListener('click', (e) => {
+      if (this.bookmarkPopup && !this.bookmarkPopup.classList.contains('hidden')) {
+        if (!this.bookmarkPopup.contains(e.target) && e.target !== this.btnBookmark && !this.btnBookmark.contains(e.target)) {
+          this.hideBookmarkPopup();
+        }
+      }
+    });
+    
     // Ad blocker toggle
     if (this.adblockToggle) {
       this.adblockToggle.addEventListener('click', (e) => {
@@ -385,7 +476,86 @@ class ForgeBrowser {
     
     // Context menu overlay
     if (this.contextMenuOverlay) {
-      this.contextMenuOverlay.addEventListener('click', () => this.hideWebviewContextMenu());
+      this.contextMenuOverlay.addEventListener('click', () => {
+        this.hideWebviewContextMenu();
+        this.hideBookmarkContextMenu();
+        this.hideBookmarksBarContextMenu();
+        this.hideFolderContextMenu();
+      });
+    }
+    
+    // Bookmark context menu item clicks
+    if (this.bookmarkContextMenu) {
+      this.bookmarkContextMenu.querySelectorAll('.context-menu-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          const action = item.dataset.action;
+          this.handleBookmarkContextAction(action);
+        });
+      });
+    }
+    
+    // Bookmarks bar context menu item clicks (right-click on empty space)
+    if (this.bookmarksBarContextMenu) {
+      this.bookmarksBarContextMenu.querySelectorAll('.context-menu-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          const action = item.dataset.action;
+          this.handleBookmarksBarContextAction(action);
+        });
+      });
+    }
+    
+    // Folder context menu item clicks
+    if (this.folderContextMenu) {
+      this.folderContextMenu.querySelectorAll('.context-menu-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          const action = item.dataset.action;
+          this.handleFolderContextAction(action);
+        });
+      });
+    }
+    
+    // Add folder modal events
+    if (this.addFolderOverlay) {
+      this.addFolderOverlay.addEventListener('click', () => this.hideAddFolderModal());
+    }
+    if (this.addFolderCancelBtn) {
+      this.addFolderCancelBtn.addEventListener('click', () => this.hideAddFolderModal());
+    }
+    if (this.addFolderSaveBtn) {
+      this.addFolderSaveBtn.addEventListener('click', () => this.saveNewFolder());
+    }
+    if (this.addFolderName) {
+      this.addFolderName.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          this.saveNewFolder();
+        } else if (e.key === 'Escape') {
+          this.hideAddFolderModal();
+        }
+      });
+    }
+    
+    // Bookmark edit modal events
+    if (this.bookmarkEditOverlay) {
+      this.bookmarkEditOverlay.addEventListener('click', () => this.hideBookmarkEditModal());
+    }
+    if (this.bookmarkEditCancelBtn) {
+      this.bookmarkEditCancelBtn.addEventListener('click', () => this.hideBookmarkEditModal());
+    }
+    if (this.bookmarkEditSaveBtn) {
+      this.bookmarkEditSaveBtn.addEventListener('click', () => this.saveEditedBookmark());
+    }
+    if (this.bookmarkEditUploadBtn) {
+      this.bookmarkEditUploadBtn.addEventListener('click', () => this.bookmarkEditIconInput?.click());
+    }
+    if (this.bookmarkEditIconInput) {
+      this.bookmarkEditIconInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          this.handleBookmarkIconUpload(e.target.files[0]);
+        }
+      });
+    }
+    if (this.bookmarkEditResetBtn) {
+      this.bookmarkEditResetBtn.addEventListener('click', () => this.resetBookmarkIcon());
     }
     
     // Close popups on click outside
@@ -442,6 +612,7 @@ applyMixin(ForgeBrowser, UIPanelsMixin);          // UI panels, main menu, updat
 applyMixin(ForgeBrowser, PasswordManagerMixin);   // Password Anvil
 applyMixin(ForgeBrowser, HistoryMixin);           // Browsing history
 applyMixin(ForgeBrowser, FavoritesMixin);         // Favorites bar
+applyMixin(ForgeBrowser, BookmarksMixin);         // Bookmarks bar
 applyMixin(ForgeBrowser, AdBlockerMixin);         // Ad blocking
 applyMixin(ForgeBrowser, AIAssistantMixin);       // AI sidebar
 applyMixin(ForgeBrowser, UrlSuggestionsMixin);    // URL autocomplete

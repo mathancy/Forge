@@ -35,13 +35,16 @@ export const UIPanelsMixin = {
 
   handleMainMenuAction(action) {
     const panelActions = ['history', 'password-anvil', 'ai-assistant', 'themes', 'import-chrome', 'about'];
-    const toggleActions = ['favorites', 'adblock']; // Actions that don't close the menu
+    const toggleActions = ['favorites', 'adblock', 'bookmarks-bar']; // Actions that don't close the menu
     const isOpeningPanel = panelActions.includes(action);
     const isToggleAction = toggleActions.includes(action);
     
     switch (action) {
       case 'new-tab':
         this.createTab();
+        break;
+      case 'bookmarks-bar':
+        this.toggleBookmarksBar();
         break;
       case 'history':
         this.hideMainMenu(true); // Instant hide

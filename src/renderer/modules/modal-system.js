@@ -23,6 +23,14 @@ export const ModalSystemMixin = {
     this.notificationModalMessage = document.getElementById('notification-modal-message');
     this.notificationModalOk = document.getElementById('notification-modal-ok');
     
+    // Prompt modal elements
+    this.promptModal = document.getElementById('prompt-modal');
+    this.promptModalTitle = document.getElementById('prompt-modal-title');
+    this.promptModalMessage = document.getElementById('prompt-modal-message');
+    this.promptModalInput = document.getElementById('prompt-modal-input');
+    this.promptModalCancel = document.getElementById('prompt-modal-cancel');
+    this.promptModalConfirm = document.getElementById('prompt-modal-confirm');
+    
     // Store current modal promise resolver
     this._modalResolver = null;
     
@@ -179,6 +187,80 @@ export const ModalSystemMixin = {
    */
   showSuccess(message, title = 'Success') {
     return this.showNotification(title, message, 'success');
+  },
+
+  /**
+   * Show prompt dialog for user input
+   * @param {string} title - Prompt title
+   * @param {string} message - Prompt message
+   * @param {string} defaultValue - Default input value (default: '')
+   * @param {Object} options - Optional configuration
+   * @param {string} options.placeholder - Input placeholder text
+   * @param {string} options.confirmText - Confirm button text (default: "OK")
+   * @param {string} options.cancelText - Cancel button text (default: "Cancel")
+   * @returns {Promise<string|null>} - Resolves to input value if confirmed, null if cancelled
+   */
+  showPrompt(title, message, defaultValue = '', options = {}) {
+    return new Promise((resolve) => {
+      const {
+        placeholder = '',
+        confirmText = 'OK',
+        cancelText = 'Cancel'
+      } = options;
+      
+      // Set content
+      this.promptModalTitle.textContent = title;
+      this.promptModalMessage.textContent = message;
+      this.promptModalInput.value = defaultValue;
+      this.promptModalInput.placeholder = placeholder;
+      this.promptModalConfirm.textContent = confirmText;
+      this.promptModalCancel.textContent = cancelText;
+      
+      // Set up event handlers
+      const handleConfirm = () => {
+        const value = this.promptModalInput.value.trim();
+        this.closePrompt();
+        resolve(value || null);
+      };
+      
+      const handleCancel = () => {
+        this.closePrompt();
+        resolve(null);
+      };
+      
+      const handleKeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleConfirm();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          handleCancel();
+        }
+      };
+      
+      // Remove old listeners and add new ones
+      this.promptModalConfirm.onclick = handleConfirm;
+      this.promptModalCancel.onclick = handleCancel;
+      this.promptModalInput.onkeydown = handleKeydown;
+      this.promptModal.onclick = (e) => {
+        if (e.target === this.promptModal) handleCancel();
+      };
+      
+      // Show modal
+      this.promptModal.classList.remove('hidden');
+      this.promptModalInput.focus();
+      this.promptModalInput.select();
+    });
+  },
+
+  /**
+   * Close prompt modal
+   */
+  closePrompt() {
+    this.promptModal?.classList.add('hidden');
+    if (this.promptModalInput) {
+      this.promptModalInput.value = '';
+    }
   }
 };
 

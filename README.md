@@ -48,6 +48,7 @@ A lightweight, privacy-focused browser built with Electron by **Forgeworks Inter
 | `Alt+Left` | Back |
 | `Alt+Right` | Forward |
 | `Ctrl+H` | History |
+| `Ctrl+Shift+B` | Toggle Bookmarks Bar |
 | `Ctrl+Shift+I` | Developer Tools |
 | `Escape` | Close Popups/Panels |
 
@@ -141,7 +142,7 @@ ForgeBrowser/
 - [x] Favorites management
 - [x] Auto-updater
 - [x] Custom themes
-- [ ] Bookmarks management
+- [x] Bookmarks management
 - [ ] Downloads manager
 - [ ] Restore tabs on session restart
 - [ ] Complete system-wide Settings panel

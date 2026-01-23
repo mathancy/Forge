@@ -330,7 +330,16 @@ export const TabManagerMixin = {
       
       if (tab.isHome) {
         this.showWelcomePage();
+        // Disable bookmark button on home tab
+        if (this.btnBookmark) {
+          this.btnBookmark.classList.add('disabled');
+          this.btnBookmark.classList.remove('bookmarked');
+        }
       } else {
+        // Enable bookmark button on regular tabs
+        if (this.btnBookmark) {
+          this.btnBookmark.classList.remove('disabled');
+        }
         if (tab.webview) {
           tab.webview.classList.add('active');
           try {
@@ -347,11 +356,21 @@ export const TabManagerMixin = {
             }
             this.urlInput.value = url || '';
             this.updateSecurityIndicator(url);
+            
+            // Update bookmark icon state
+            if (this.updateBookmarkIconState) {
+              this.updateBookmarkIconState(url);
+            }
           } catch (e) {
             // No URL yet, show blank background
             this.welcomePage.classList.remove('hidden');
             this.welcomePage.classList.add('blank-tab');
             this.urlInput.value = '';
+            
+            // Clear bookmark icon state
+            if (this.btnBookmark) {
+              this.btnBookmark.classList.remove('bookmarked');
+            }
           }
           this.updateNavigationButtons();
         }

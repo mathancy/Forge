@@ -50,6 +50,9 @@ export const KeyboardShortcutsMixin = {
       case 'show-history':
         this.showHistoryPanel();
         break;
+      case 'toggle-bookmarks-bar':
+        this.toggleBookmarksBar();
+        break;
       case 'close-popups':
         this.closeAllPopups();
         break;
@@ -143,6 +146,13 @@ export const KeyboardShortcutsMixin = {
       // Escape: Close panels
       if (e.key === 'Escape') {
         this.closeAllPopups();
+        return;
+      }
+      
+      // Ctrl+Shift+B: Toggle bookmarks bar
+      if (e.ctrlKey && e.shiftKey && e.key === 'B') {
+        e.preventDefault();
+        this.toggleBookmarksBar();
         return;
       }
     });

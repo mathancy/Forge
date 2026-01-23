@@ -11,6 +11,7 @@ const AIService = require('./ai-service');
 const autoUpdaterService = require('./auto-updater');
 const FavoritesService = require('./favorites-service');
 const PasswordService = require('./password-service');
+const BookmarksService = require('./bookmarks-service');
 const { getAdBlocker, getCosmeticInjector, getScriptInjector } = require('./ad-blocker');
 
 // Initialize Chrome Importer
@@ -21,6 +22,9 @@ const favoritesService = new FavoritesService();
 
 // Initialize Password Service
 const passwordService = new PasswordService();
+
+// Initialize Bookmarks Service
+const bookmarksService = new BookmarksService();
 
 // Initialize Ad Blocker (network blocking)
 const adBlocker = getAdBlocker();
@@ -100,6 +104,7 @@ function handleKeyboardShortcut(event, input, targetWindow) {
   else if (alt && !ctrl && key === 'arrowleft') shortcut = 'go-back';
   else if (alt && !ctrl && key === 'arrowright') shortcut = 'go-forward';
   else if (ctrl && !shift && key === 'h') shortcut = 'show-history';
+  else if (ctrl && shift && key === 'b') shortcut = 'toggle-bookmarks-bar';
   else if (key === 'escape') shortcut = 'close-popups';
   else if (ctrl && shift && key === 'i') {
     // Open DevTools for the main window (docked) - works for inspecting both browser UI and webviews
@@ -239,6 +244,7 @@ app.whenReady().then(() => {
   // Initialize services
   favoritesService.initialize();
   passwordService.initialize();
+  bookmarksService.initialize();
   
   createWindow();
   
@@ -567,6 +573,63 @@ ipcMain.handle('favorites-remove', (event, slotIndex) => {
   return favoritesService.removeFavorite(slotIndex);
 });
 
+// Bookmarks IPC handlers
+ipcMain.handle('bookmarks-get', () => {
+  return bookmarksService.getBookmarks();
+});
+
+ipcMain.handle('bookmarks-set-bar-enabled', (event, enabled) => {
+  return bookmarksService.setBarEnabled(enabled);
+});
+
+ipcMain.handle('bookmarks-is-bar-enabled', () => {
+  return bookmarksService.isBarEnabled();
+});
+
+ipcMain.handle('bookmarks-add', (event, { url, title, icon, folderId }) => {
+  return bookmarksService.addBookmark({ url, title, icon, folderId });
+});
+
+ipcMain.handle('bookmarks-create-folder', (event, { name, parentFolderId }) => {
+  return bookmarksService.createFolder({ name, parentFolderId });
+});
+
+ipcMain.handle('bookmarks-remove', (event, itemId) => {
+  return bookmarksService.removeItem(itemId);
+});
+
+ipcMain.handle('bookmarks-update', (event, itemId, updates) => {
+  return bookmarksService.updateItem(itemId, updates);
+});
+
+ipcMain.handle('bookmarks-move', (event, itemId, targetFolderId, targetIndex) => {
+  return bookmarksService.moveItem(itemId, targetFolderId, targetIndex);
+});
+
+ipcMain.handle('bookmarks-is-bookmarked', (event, url) => {
+  return bookmarksService.isBookmarked(url);
+});
+
+ipcMain.handle('bookmarks-find-by-url', (event, url) => {
+  return bookmarksService.findBookmarkByUrl(url);
+});
+
+ipcMain.handle('bookmarks-get-folders', () => {
+  return bookmarksService.getFolderList();
+});
+
+ipcMain.handle('bookmarks-import', (event, htmlContent) => {
+  return bookmarksService.importFromHtml(htmlContent);
+});
+
+ipcMain.handle('bookmarks-save-icon', (event, bookmarkId, base64Data, mimeType) => {
+  return bookmarksService.saveCustomIcon(bookmarkId, base64Data, mimeType);
+});
+
+ipcMain.handle('bookmarks-delete-icon', (event, bookmarkId) => {
+  return bookmarksService.deleteCustomIcon(bookmarkId);
+});
+
 // URL Autocomplete IPC handler
 ipcMain.handle('get-url-suggestions', async (event, query) => {
   try {
@@ -601,6 +664,7 @@ app.whenReady().then(() => {
   loadGoogleCredentials();
   aiService = new AIService(app);
   favoritesService.initialize();
+  bookmarksService.initialize();
   
   // Initialize ad-blocker with bundled filter lists
   const rulesDir = app.isPackaged
