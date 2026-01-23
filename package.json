@@ -76,7 +76,11 @@
       "installerHeaderIcon": "assets/forge-logo.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Forge Browser"
+      "shortcutName": "Forge Browser",
+      "artifactName": "Forge-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Forge-${version}.${ext}"
     },
     "mac": {
       "target": [
