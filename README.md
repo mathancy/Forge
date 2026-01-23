@@ -32,7 +32,7 @@ A lightweight, privacy-focused browser built with Electron by **Forgeworks Inter
 ### ⚡ Performance
 - **Lightweight** - Minimal footprint, maximum performance
 - **Auto Updates** - Built-in update system keeps you current
-- **Session Restore** - Tabs persist across browser restarts (soon)
+- **Session Restore** - Tabs persist across browser restarts with lazy loading
 
 ### ⌨️ Keyboard Shortcuts
 
@@ -103,25 +103,59 @@ npm run build:linux
 ```
 ForgeBrowser/
 ├── src/
-│   ├── main/
-│   │   ├── main.js              # Main process entry
-│   │   ├── ad-blocker/          # Ad blocking engine
-│   │   ├── auto-updater.js      # Update management
-│   │   └── password-manager.js  # Credential storage
+│   ├── main/                        # Main process (Node.js)
+│   │   ├── main.js                  # Main process entry point
+│   │   ├── ad-blocker/              # Ad blocking engine
+│   │   │   ├── index.js             # Ad blocker module exports
+│   │   │   ├── ad-blocker.js        # Network request blocking
+│   │   │   ├── cosmetic-injector.js # Element hiding CSS injection
+│   │   │   └── script-injector.js   # Site-specific scripts (YouTube)
+│   │   ├── auto-updater.js          # Update management
+│   │   ├── bookmarks-service.js     # Bookmarks storage
+│   │   ├── chrome-importer.js       # Chrome data import
+│   │   ├── favorites-service.js     # Favorites management
+│   │   ├── google-auth.js           # Google OAuth
+│   │   ├── ai-service.js            # AI provider management
+│   │   └── password-service.js      # Credential storage
 │   ├── preload/
-│   │   └── preload.js           # Secure IPC bridge
-│   └── renderer/
-│       ├── index.html           # Browser UI
-│       ├── styles.css           # Styling
-│       ├── renderer.js          # Main renderer logic
-│       └── modules/             # Feature modules
-│           ├── ad-blocker.js
-│           ├── ai-assistant.js
-│           ├── password-manager.js
-│           └── ui-panels.js
+│   │   └── preload.js               # Secure IPC bridge
+│   └── renderer/                    # Renderer process (Browser UI)
+│       ├── index.html               # Main browser window
+│       ├── styles.css               # Global styles
+│       ├── renderer.js              # Main renderer orchestrator
+│       ├── password-anvil/          # Password Anvil window
+│       │   ├── index.html           # Password manager UI
+│       │   └── password-anvil.js    # Password manager logic
+│       └── modules/                 # Feature modules (mixins)
+│           ├── ad-blocker.js        # Ad blocker UI integration
+│           ├── ai-assistant.js      # AI sidebar panel
+│           ├── bookmarks.js         # Bookmarks bar & management
+│           ├── brightness-control.js # Brightness slider
+│           ├── favorites.js         # Favorites bar
+│           ├── history.js           # History panel
+│           ├── keyboard-shortcuts.js # Keyboard shortcut handling
+│           ├── modal-system.js      # Modal dialogs & notifications
+│           ├── navigation.js        # URL processing, back/forward
+│           ├── password-manager.js  # Password autofill integration
+│           ├── tab-manager.js       # Tab creation, switching, drag & drop
+│           ├── text-context-menu.js # Text selection context menu
+│           ├── themes.js            # Theme management
+│           ├── ui-panels.js         # Main menu, update panel
+│           ├── url-suggestions.js   # URL autocomplete
+│           ├── utils.js             # Utility functions
+│           ├── webview-events.js    # Webview event handlers
+│           ├── welcome-particles.js # Home page particle effects
+│           └── window-controls.js   # Window minimize/maximize/close
 ├── assets/
-│   ├── forge-logo.ico           # App icon
-│   └── filter-lists/            # Ad blocking rules
+│   ├── site-logos/                  # Favicon overrides for popular sites
+│   ├── ui-icons/                    # UI icons (SVG)
+│   └── forge-logo.ico               # App icon
+├── filter-lists/                    # Ad blocking rules (JSON)
+│   ├── default.json                 # Default filter list
+│   ├── cosmetic-default.json        # Cosmetic filters
+│   └── youtube.json                 # YouTube-specific rules
+├── build/
+│   └── afterPack.js                 # Post-build script
 └── package.json
 ```
 
@@ -143,8 +177,8 @@ ForgeBrowser/
 - [x] Auto-updater
 - [x] Custom themes
 - [x] Bookmarks management
+- [x] Session restore with lazy tab loading
 - [ ] Downloads manager
-- [ ] Restore tabs on session restart
 - [ ] Complete system-wide Settings panel
 - [ ] User-created theme support
 - [ ] Extensions/plugin support

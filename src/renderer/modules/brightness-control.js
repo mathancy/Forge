@@ -6,6 +6,9 @@ export const BrightnessControlMixin = {
     // Brightness setting (single source of truth for all tabs)
     this.currentBrightness = parseInt(localStorage.getItem('webview-brightness') || '100');
     
+    // Get the container element
+    const brightnessContainer = document.querySelector('.menu-brightness-control');
+    
     // Set up brightness slider
     if (this.brightnessSlider) {
       this.brightnessSlider.value = this.currentBrightness;
@@ -21,6 +24,52 @@ export const BrightnessControlMixin = {
       // Prevent menu from closing when interacting with slider
       this.brightnessSlider.addEventListener('click', (e) => e.stopPropagation());
       this.brightnessSlider.addEventListener('mousedown', (e) => e.stopPropagation());
+    }
+    
+    // Allow clicking anywhere in the container to control the slider
+    if (brightnessContainer && this.brightnessSlider) {
+      brightnessContainer.addEventListener('mousedown', (e) => {
+        // Don't interfere if clicking directly on the slider thumb
+        if (e.target === this.brightnessSlider) return;
+        
+        e.stopPropagation();
+        
+        // Calculate the value based on click position relative to the slider
+        const sliderRect = this.brightnessSlider.getBoundingClientRect();
+        const min = parseInt(this.brightnessSlider.min) || 20;
+        const max = parseInt(this.brightnessSlider.max) || 100;
+        
+        const updateValueFromPosition = (clientX) => {
+          const x = Math.max(sliderRect.left, Math.min(clientX, sliderRect.right));
+          const percentage = (x - sliderRect.left) / sliderRect.width;
+          const newValue = Math.round(min + percentage * (max - min));
+          
+          this.brightnessSlider.value = newValue;
+          this.currentBrightness = newValue;
+          this.updateBrightnessSliderFill();
+          this.applyBrightness();
+          localStorage.setItem('webview-brightness', this.currentBrightness);
+        };
+        
+        // Set initial value from click position
+        updateValueFromPosition(e.clientX);
+        
+        // Handle dragging
+        const onMouseMove = (moveEvent) => {
+          updateValueFromPosition(moveEvent.clientX);
+        };
+        
+        const onMouseUp = () => {
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+        
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+      
+      // Prevent click from closing menu
+      brightnessContainer.addEventListener('click', (e) => e.stopPropagation());
     }
   },
 

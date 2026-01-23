@@ -772,7 +772,8 @@ export const PasswordManagerMixin = {
       // Set up listener BEFORE injecting script
       this.setupPasswordRequestListener(webview);
       
-      // Build script using array join to avoid template literal issues
+      // Build script that communicates with browser UI layer for popup rendering
+      // This avoids CSS conflicts and iframe clipping issues
       const script = [
         '(function() {',
         '  "use strict";',
@@ -786,22 +787,35 @@ export const PasswordManagerMixin = {
         '  ',
         '  var passwordFields = [];',
         '  var autofillSuggestions = [];',
-        '  var suggestionBox = null;',
+        '  var currentFocusedField = null;',
+        '  var hasRequestedPasswords = false;',
+        '  var hasFilled = false;',
+        '  var detectTimeout = null;',
+        '  var popupVisible = false;',
+        '  ',
+        '  // Throttled detect function to prevent spam',
+        '  function scheduleDetect() {',
+        '    if (detectTimeout) return;',
+        '    detectTimeout = setTimeout(function() {',
+        '      detectTimeout = null;',
+        '      detectPasswordFields();',
+        '    }, 500);',
+        '  }',
         '  ',
         '  function detectPasswordFields() {',
-        '    var newFields = [];',
-        '    ',
-        '    // Find password inputs',
         '    var inputs = document.querySelectorAll("input[type=password], input[type=text][autocomplete*=password]");',
-        '    ',
-        '    console.log("[Forge Password] Scanning page, found " + inputs.length + " potential fields");',
+        '    var foundNew = false;',
         '    ',
         '    inputs.forEach(function(field) {',
         '      if (passwordFields.indexOf(field) === -1) {',
         '        passwordFields.push(field);',
-        '        newFields.push(field);',
         '        setupFieldListeners(field);',
-        '        console.log("[Forge Password] Added password field: " + (field.name || field.id || "unnamed"));',
+        '        foundNew = true;',
+        '        ',
+        '        // Check if this field is already focused (page loaded with focus)',
+        '        if (document.activeElement === field && !hasFilled) {',
+        '          currentFocusedField = field;',
+        '        }',
         '      }',
         '    });',
         '    ',
@@ -810,14 +824,19 @@ export const PasswordManagerMixin = {
         '      var usernameField = findUsernameField(pwField);',
         '      if (usernameField && passwordFields.indexOf(usernameField) === -1) {',
         '        passwordFields.push(usernameField);',
-        '        newFields.push(usernameField);',
         '        setupFieldListeners(usernameField);',
-        '        console.log("[Forge Password] Added username field: " + (usernameField.name || usernameField.id || "unnamed"));',
+        '        foundNew = true;',
+        '        ',
+        '        // Check if this field is already focused',
+        '        if (document.activeElement === usernameField && !hasFilled) {',
+        '          currentFocusedField = usernameField;',
+        '        }',
         '      }',
         '    });',
         '    ',
-        '    if (newFields.length > 0) {',
-        '      console.log("[Forge Password] Total fields: " + passwordFields.length);',
+        '    // Only request passwords once per page',
+        '    if (passwordFields.length > 0 && !hasRequestedPasswords) {',
+        '      hasRequestedPasswords = true;',
         '      requestPasswordsForSite();',
         '    }',
         '  }',
@@ -846,24 +865,53 @@ export const PasswordManagerMixin = {
         '    return null;',
         '  }',
         '  ',
+        '  function getFieldPosition(field) {',
+        '    var rect = field.getBoundingClientRect();',
+        '    return {',
+        '      top: rect.top,',
+        '      left: rect.left,',
+        '      bottom: rect.bottom,',
+        '      right: rect.right,',
+        '      width: rect.width,',
+        '      height: rect.height',
+        '    };',
+        '  }',
+        '  ',
+        '  function isFieldActuallyFocused(field) {',
+        '    return document.activeElement === field;',
+        '  }',
+        '  ',
         '  function setupFieldListeners(field) {',
         '    field.addEventListener("focus", function() {',
-        '      console.log("[Forge Password] Field focused: " + (field.name || field.id || "unnamed"));',
+        '      // If we already filled, do not show popup again',
+        '      if (hasFilled) return;',
+        '      ',
+        '      currentFocusedField = field;',
         '      ',
         '      if (autofillSuggestions.length === 0) {',
-        '        requestPasswordsForSite();',
+        '        // Wait for suggestions to arrive',
         '        setTimeout(function() {',
-        '          if (autofillSuggestions.length > 0) {',
-        '            showAutofillSuggestions(field);',
+        '          if (autofillSuggestions.length > 0 && isFieldActuallyFocused(field) && !hasFilled) {',
+        '            requestShowPopup(field);',
         '          }',
-        '        }, 150);',
-        '      } else {',
-        '        showAutofillSuggestions(field);',
+        '        }, 200);',
+        '      } else if (!hasFilled) {',
+        '        requestShowPopup(field);',
         '      }',
         '    });',
         '    ',
         '    field.addEventListener("blur", function() {',
-        '      setTimeout(function() { hideSuggestions(); }, 300);',
+        '      setTimeout(function() {',
+        '        // Only hide if no password field is focused',
+        '        var anyFieldFocused = passwordFields.some(function(f) {',
+        '          return document.activeElement === f;',
+        '        });',
+        '        ',
+        '        if (!anyFieldFocused) {',
+        '          requestHidePopup();',
+        '          currentFocusedField = null;',
+        '        }',
+        '      }, 250);',
         '    });',
         '  }',
         '  ',
@@ -871,96 +919,96 @@ export const PasswordManagerMixin = {
         '    console.log("[FORGE_REQUEST_PASSWORDS] " + window.location.href);',
         '  }',
         '  ',
-        '  function showAutofillSuggestions(field) {',
-        '    if (autofillSuggestions.length === 0) return;',
+        '  // Request browser UI to show popup',
+        '  function requestShowPopup(field) {',
+        '    if (autofillSuggestions.length === 0 || hasFilled) return;',
+        '    if (!isFieldActuallyFocused(field)) return;',
         '    ',
-        '    if (!suggestionBox) {',
-        '      createSuggestionBox();',
-        '    }',
-        '    ',
-        '    var rect = field.getBoundingClientRect();',
-        '    suggestionBox.style.top = (rect.bottom + window.scrollY + 2) + "px";',
-        '    suggestionBox.style.left = (rect.left + window.scrollX) + "px";',
-        '    suggestionBox.style.width = Math.max(rect.width, 250) + "px";',
-        '    suggestionBox.style.display = "block";',
-        '    ',
-        '    var html = "";',
-        '    for (var i = 0; i < autofillSuggestions.length; i++) {',
-        '      var cred = autofillSuggestions[i];',
-        '      var hostname = "";',
-        '      try { hostname = new URL(cred.url).hostname; } catch(e) { hostname = cred.url; }',
-        '      html += "<div class=\\"forge-autofill-item\\" data-index=\\"" + i + "\\">";',
-        '      html += "<div class=\\"forge-autofill-username\\">" + escapeHtml(cred.username) + "</div>";',
-        '      html += "<div class=\\"forge-autofill-url\\">" + escapeHtml(hostname) + "</div>";',
-        '      html += "</div>";',
-        '    }',
-        '    suggestionBox.innerHTML = html;',
-        '    ',
-        '    var items = suggestionBox.querySelectorAll(".forge-autofill-item");',
-        '    items.forEach(function(item) {',
-        '      item.addEventListener("mousedown", function(e) {',
-        '        e.preventDefault();',
-        '        var index = parseInt(item.getAttribute("data-index"));',
-        '        fillCredentials(autofillSuggestions[index]);',
-        '        hideSuggestions();',
-        '      });',
-        '    });',
+        '    popupVisible = true;',
+        '    var position = getFieldPosition(field);',
+        '    console.log("[FORGE_SHOW_AUTOFILL] " + JSON.stringify({',
+        '      position: position,',
+        '      suggestions: autofillSuggestions',
+        '    }));',
         '  }',
         '  ',
-        '  function createSuggestionBox() {',
-        '    suggestionBox = document.createElement("div");',
-        '    suggestionBox.id = "forge-password-suggestions";',
-        '    suggestionBox.style.cssText = "position:absolute;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:999999;display:none;max-height:200px;overflow-y:auto;";',
-        '    ',
-        '    var style = document.createElement("style");',
-        '    style.textContent = ".forge-autofill-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid #3a3a3a;transition:background 0.2s;}.forge-autofill-item:last-child{border-bottom:none;}.forge-autofill-item:hover{background:#3a3a3a;}.forge-autofill-username{color:#e0e0e0;font-weight:500;font-size:14px;margin-bottom:2px;}.forge-autofill-url{color:#999;font-size:12px;}";',
-        '    ',
-        '    document.head.appendChild(style);',
-        '    document.body.appendChild(suggestionBox);',
-        '  }',
-        '  ',
-        '  function hideSuggestions() {',
-        '    if (suggestionBox) {',
-        '      suggestionBox.style.display = "none";',
+        '  // Request browser UI to hide popup',
+        '  function requestHidePopup() {',
+        '    if (popupVisible) {',
+        '      popupVisible = false;',
+        '      console.log("[FORGE_HIDE_AUTOFILL]");',
         '    }',
         '  }',
         '  ',
         '  function fillCredentials(credentials) {',
+        '    // Mark as filled to prevent popup from reappearing',
+        '    hasFilled = true;',
+        '    requestHidePopup();',
+        '    ',
         '    var form = passwordFields[0] ? passwordFields[0].closest("form") : null;',
-        '    if (!form) return;',
+        '    var usernameField = form ? findUsernameField(passwordFields[0]) : null;',
         '    ',
-        '    var usernameField = findUsernameField(passwordFields[0]);',
+        '    if (!usernameField) {',
+        '      var inputs = document.querySelectorAll("input[type=text], input[type=email]");',
+        '      for (var i = 0; i < inputs.length; i++) {',
+        '        var input = inputs[i];',
+        '        var name = (input.name || "").toLowerCase();',
+        '        var id = (input.id || "").toLowerCase();',
+        '        if (name.indexOf("user") !== -1 || name.indexOf("email") !== -1 ||',
+        '            id.indexOf("user") !== -1 || id.indexOf("email") !== -1) {',
+        '          usernameField = input;',
+        '          break;',
+        '        }',
+        '      }',
+        '    }',
+        '    ',
+        '    var passwordField = form ? form.querySelector("input[type=password]") : document.querySelector("input[type=password]");',
+        '    ',
         '    if (usernameField) {',
-        '      usernameField.value = credentials.username;',
-        '      usernameField.dispatchEvent(new Event("input", { bubbles: true }));',
-        '      usernameField.dispatchEvent(new Event("change", { bubbles: true }));',
+        '      setNativeValue(usernameField, credentials.username);',
         '    }',
-        '    ',
-        '    var passwordField = form.querySelector("input[type=password]");',
         '    if (passwordField) {',
-        '      passwordField.value = credentials.password;',
-        '      passwordField.dispatchEvent(new Event("input", { bubbles: true }));',
-        '      passwordField.dispatchEvent(new Event("change", { bubbles: true }));',
+        '      setNativeValue(passwordField, credentials.password);',
         '    }',
-        '    ',
-        '    console.log("[Forge Password] Filled credentials for " + credentials.username);',
         '  }',
         '  ',
-        '  function escapeHtml(text) {',
-        '    var div = document.createElement("div");',
-        '    div.textContent = text;',
-        '    return div.innerHTML;',
+        '  function setNativeValue(element, value) {',
+        '    var valueSetter = Object.getOwnPropertyDescriptor(element.constructor.prototype, "value");',
+        '    if (valueSetter && valueSetter.set) {',
+        '      valueSetter.set.call(element, value);',
+        '    } else {',
+        '      element.value = value;',
+        '    }',
+        '    element.dispatchEvent(new Event("input", { bubbles: true }));',
+        '    element.dispatchEvent(new Event("change", { bubbles: true }));',
         '  }',
         '  ',
         '  window.addEventListener("message", function(event) {',
         '    if (event.data && event.data.type === "FORGE_PASSWORDS") {',
         '      autofillSuggestions = event.data.passwords;',
-        '      console.log("[Forge Password] Received " + autofillSuggestions.length + " credentials");',
         '      ',
-        '      var focusedElement = document.activeElement;',
-        '      if (focusedElement && passwordFields.indexOf(focusedElement) !== -1) {',
-        '        showAutofillSuggestions(focusedElement);',
+        '      // Check if any password field is currently focused',
+        '      var focusedField = null;',
+        '      for (var i = 0; i < passwordFields.length; i++) {',
+        '        if (document.activeElement === passwordFields[i]) {',
+        '          focusedField = passwordFields[i];',
+        '          break;',
+        '        }',
         '      }',
+        '      ',
+        '      // Update currentFocusedField if we found one',
+        '      if (focusedField) {',
+        '        currentFocusedField = focusedField;',
+        '      }',
+        '      ',
+        '      // Show popup if a field is focused and we have not filled yet',
+        '      if (!hasFilled && focusedField) {',
+        '        requestShowPopup(focusedField);',
+        '      }',
+        '    }',
+        '    ',
+        '    if (event.data && event.data.type === "FORGE_FILL_CREDENTIALS") {',
+        '      fillCredentials(event.data.credentials);',
         '    }',
         '  });',
         '  ',
@@ -971,9 +1019,9 @@ export const PasswordManagerMixin = {
         '    document.addEventListener("DOMContentLoaded", detectPasswordFields);',
         '  }',
         '  ',
-        '  // Watch for DOM changes',
+        '  // Watch for DOM changes with throttling',
         '  var observer = new MutationObserver(function() {',
-        '    detectPasswordFields();',
+        '    scheduleDetect();',
         '  });',
         '  ',
         '  if (document.body) {',
@@ -1001,7 +1049,13 @@ export const PasswordManagerMixin = {
     }
     webview._forgePasswordListener = true;
     
+    // Cache reference to the autofill popup
+    if (!this._autofillPopup) {
+      this._autofillPopup = document.getElementById('password-autofill-popup');
+    }
+    
     webview.addEventListener('console-message', async (e) => {
+      // Handle password request
       if (e.message && e.message.startsWith('[FORGE_REQUEST_PASSWORDS]')) {
         const url = e.message.replace('[FORGE_REQUEST_PASSWORDS]', '').trim();
         console.log('[Password] Request received for:', url);
@@ -1019,7 +1073,104 @@ export const PasswordManagerMixin = {
           console.error('[Password] Failed to get passwords:', err);
         }
       }
+      
+      // Handle show autofill popup request
+      if (e.message && e.message.startsWith('[FORGE_SHOW_AUTOFILL]')) {
+        try {
+          const jsonStr = e.message.replace('[FORGE_SHOW_AUTOFILL]', '').trim();
+          const data = JSON.parse(jsonStr);
+          this.showAutofillPopup(webview, data.position, data.suggestions);
+        } catch (err) {
+          console.error('[Password] Failed to parse autofill request:', err);
+        }
+      }
+      
+      // Handle hide autofill popup request
+      if (e.message && e.message.startsWith('[FORGE_HIDE_AUTOFILL]')) {
+        this.hideAutofillPopup();
+      }
     });
+  },
+  
+  /**
+   * Show the autofill popup in the browser UI layer
+   * @param {HTMLWebViewElement} webview - The webview element
+   * @param {Object} fieldPosition - Position of the input field in webview coordinates
+   * @param {Array} suggestions - Array of credential suggestions
+   */
+  showAutofillPopup(webview, fieldPosition, suggestions) {
+    if (!this._autofillPopup || !suggestions || suggestions.length === 0) {
+      return;
+    }
+    
+    // Store reference to current webview for filling
+    this._autofillWebview = webview;
+    
+    // Get webview position relative to the browser window
+    const webviewRect = webview.getBoundingClientRect();
+    
+    // Calculate popup position (field position is relative to webview)
+    const top = webviewRect.top + fieldPosition.bottom + 4;
+    const left = webviewRect.left + fieldPosition.left;
+    const width = Math.max(fieldPosition.width, 280);
+    
+    // Build popup content
+    this._autofillPopup.innerHTML = suggestions.map((cred, index) => {
+      let hostname = cred.url;
+      try {
+        hostname = new URL(cred.url).hostname;
+      } catch (e) {}
+      
+      return `
+        <div class="password-autofill-item" data-index="${index}">
+          <div class="password-autofill-username">${escapeHtml(cred.username)}</div>
+          <div class="password-autofill-url">${escapeHtml(hostname)}</div>
+        </div>
+      `;
+    }).join('');
+    
+    // Store suggestions for click handler
+    this._autofillSuggestions = suggestions;
+    
+    // Add click handlers
+    this._autofillPopup.querySelectorAll('.password-autofill-item').forEach(item => {
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const index = parseInt(item.dataset.index);
+        const credential = this._autofillSuggestions[index];
+        
+        if (credential && this._autofillWebview) {
+          // Send fill command to webview
+          const code = `(function() { window.postMessage({ type: "FORGE_FILL_CREDENTIALS", credentials: ${JSON.stringify(credential)} }, "*"); })();`;
+          this._autofillWebview.executeJavaScript(code);
+          console.log('[Password] Sent fill command for:', credential.username);
+        }
+        
+        this.hideAutofillPopup();
+      });
+    });
+    
+    // Position and show the popup
+    this._autofillPopup.style.top = `${top}px`;
+    this._autofillPopup.style.left = `${left}px`;
+    this._autofillPopup.style.width = `${width}px`;
+    this._autofillPopup.classList.remove('hidden');
+    
+    console.log('[Password] Showing autofill popup at:', { top, left, width, count: suggestions.length });
+  },
+  
+  /**
+   * Hide the autofill popup
+   */
+  hideAutofillPopup() {
+    if (this._autofillPopup) {
+      this._autofillPopup.classList.add('hidden');
+      this._autofillPopup.innerHTML = '';
+    }
+    this._autofillWebview = null;
+    this._autofillSuggestions = null;
   }
 };
 

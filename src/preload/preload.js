@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('forgeAPI', {
   onOpenUrl: (callback) => {
     ipcRenderer.on('open-url', (event, url) => callback(url));
   },
+  onOpenUrlInNewTab: (callback) => {
+    ipcRenderer.on('open-url-in-new-tab', (event, url) => callback(url));
+  },
   
   // App info
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
@@ -29,6 +32,14 @@ contextBridge.exposeInMainWorld('forgeAPI', {
   // Window management
   createNewWindow: (url) => ipcRenderer.invoke('create-new-window', url),
   createPasswordAnvilWindow: () => ipcRenderer.invoke('create-password-anvil-window'),
+  
+  // Session management (tab persistence)
+  session: {
+    save: (sessionData) => ipcRenderer.invoke('session-save', sessionData),
+    load: () => ipcRenderer.invoke('session-load'),
+    clear: () => ipcRenderer.invoke('session-clear'),
+    getWindowCount: () => ipcRenderer.invoke('get-window-count')
+  },
   
   // Google Auth
   googleAuth: {

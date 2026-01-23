@@ -111,6 +111,7 @@ export const ThemesMixin = {
         root.style.setProperty('--icon-filter-accent', 'brightness(0) saturate(100%) invert(64%) sepia(53%) saturate(3098%) hue-rotate(335deg) brightness(102%) contrast(101%)');
         root.style.setProperty('--icon-filter-accent-hover', 'brightness(0) saturate(100%) invert(78%) sepia(53%) saturate(1057%) hue-rotate(344deg) brightness(103%) contrast(97%)');
         root.style.setProperty('--icon-filter-success', 'brightness(0) saturate(100%) invert(60%) sepia(80%) saturate(500%) hue-rotate(85deg) brightness(95%) contrast(90%)');
+        root.style.setProperty('--logo-filter-accent', 'brightness(0) saturate(100%) invert(64%) sepia(53%) saturate(3098%) hue-rotate(335deg) brightness(102%) contrast(101%)');
         // Glow colors for text effects
         root.style.setProperty('--glow-color-base', 'rgba(255, 150, 30, 0.3)');
         root.style.setProperty('--glow-color-mid', 'rgba(255, 150, 30, 0.2)');

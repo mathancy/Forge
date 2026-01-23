@@ -76,6 +76,7 @@ class ScriptInjector {
   const CONFIG = {
     checkInterval: 50,       // Check for ads every 50ms (faster)
     batchRemoveInterval: 500, // Remove promoted content every 500ms
+    adStuckTimeout: 500,     // If ad is stuck for 500ms with no progress, force skip
     debug: false             // Disable verbose logging
   };
   
@@ -220,6 +221,8 @@ class ScriptInjector {
   
   function forceSkipAd() {
     const video = getVideo();
+    const player = getPlayer();
+    
     if (!video) {
       log('No video element found');
       return false;
@@ -227,7 +230,7 @@ class ScriptInjector {
     
     log('Attempting to force skip ad. Duration:', video.duration, 'Current time:', video.currentTime);
     
-    // Skip to end of ad
+    // Method 1: Skip to end of ad video
     if (video.duration && isFinite(video.duration) && video.duration > 0 && video.duration < 300) {
       // Ads are usually under 5 minutes
       video.currentTime = video.duration - 0.01;
@@ -235,12 +238,79 @@ class ScriptInjector {
       return true;
     }
     
-    // If we can't skip, speed it up
+    // Method 2: Try to trigger the skip via YouTube's player API
+    if (player) {
+      try {
+        // Try to find and call skipAd on the player
+        const playerApi = document.getElementById('movie_player');
+        if (playerApi && typeof playerApi.skipAd === 'function') {
+          playerApi.skipAd();
+          log('Called skipAd() on player API');
+          return true;
+        }
+        if (playerApi && typeof playerApi.cancelPlayback === 'function') {
+          // This can force the player to give up on the ad
+          playerApi.cancelPlayback();
+          log('Called cancelPlayback() on player API');
+        }
+      } catch (e) {
+        log('Player API skip failed:', e);
+      }
+    }
+    
+    // Method 3: Speed up and mute
     video.playbackRate = 16;
     video.muted = true;
     video.volume = 0;
     log('Speeding up ad to 16x');
     return true;
+  }
+  
+  // Track stuck ad state
+  let adStartTime = 0;
+  let lastAdVideoTime = -1;
+  let stuckAdCheckCount = 0;
+  
+  // Force reload the video player to skip stuck ads
+  function forceReloadVideo() {
+    log('>>> FORCING VIDEO RELOAD TO SKIP STUCK AD <<<');
+    
+    const player = document.getElementById('movie_player');
+    if (player) {
+      // Remove ad classes to clear ad state
+      player.classList.remove('ad-showing', 'ad-interrupting');
+      
+      try {
+        // Try to get the video ID and reload
+        if (typeof player.getVideoData === 'function') {
+          const videoData = player.getVideoData();
+          const videoId = videoData?.video_id;
+          
+          if (videoId && typeof player.loadVideoById === 'function') {
+            log('Reloading video:', videoId);
+            player.loadVideoById(videoId);
+            notifyAdBlocked(1);
+            return true;
+          }
+        }
+        
+        // Alternative: try to seek to start which can clear ad state
+        if (typeof player.seekTo === 'function') {
+          player.seekTo(0, true);
+          log('Seeked to start');
+          notifyAdBlocked(1);
+          return true;
+        }
+      } catch (e) {
+        log('Player API reload failed:', e);
+      }
+    }
+    
+    // Last resort: reload the page
+    // This is aggressive but guarantees we skip the stuck ad
+    // location.reload();
+    
+    return false;
   }
   
   // Store original playback state
@@ -262,6 +332,11 @@ class ScriptInjector {
         log('Ad ended, restored playback settings');
         notifyAdBlocked(1); // Count the skipped video ad
         wasPlayingAd = false;
+        
+        // Reset stuck ad tracking
+        adStartTime = 0;
+        lastAdVideoTime = -1;
+        stuckAdCheckCount = 0;
       }
       return;
     }
@@ -272,6 +347,9 @@ class ScriptInjector {
       savedMuted = video.muted;
       savedVolume = video.volume;
       wasPlayingAd = true;
+      adStartTime = Date.now();
+      lastAdVideoTime = video.currentTime;
+      stuckAdCheckCount = 0;
     }
     
     log('>>> AD PLAYING <<<');
@@ -280,6 +358,44 @@ class ScriptInjector {
     if (clickSkipButton()) {
       log('Skip button clicked successfully');
       return;
+    }
+    
+    // Check if ad is stuck (video not progressing)
+    if (video && wasPlayingAd) {
+      const currentVideoTime = video.currentTime;
+      const timeSinceAdStart = Date.now() - adStartTime;
+      
+      // Check if video is stuck (same time or barely moving, or no valid duration)
+      const isVideoStuck = (
+        !video.duration || 
+        !isFinite(video.duration) || 
+        video.duration === 0 ||
+        video.paused ||
+        video.readyState < 2 || // HAVE_CURRENT_DATA
+        (Math.abs(currentVideoTime - lastAdVideoTime) < 0.1 && timeSinceAdStart > CONFIG.adStuckTimeout)
+      );
+      
+      if (isVideoStuck) {
+        stuckAdCheckCount++;
+        log('Ad appears stuck. Check count:', stuckAdCheckCount, 'Time since start:', timeSinceAdStart);
+        
+        // After a few stuck checks (about 250-500ms), force reload
+        if (stuckAdCheckCount >= 5) {
+          log('Ad confirmed stuck, forcing reload...');
+          if (forceReloadVideo()) {
+            wasPlayingAd = false;
+            adStartTime = 0;
+            lastAdVideoTime = -1;
+            stuckAdCheckCount = 0;
+            return;
+          }
+        }
+      } else {
+        // Video is progressing, reset stuck counter
+        stuckAdCheckCount = 0;
+      }
+      
+      lastAdVideoTime = currentVideoTime;
     }
     
     // Force skip the ad
@@ -498,6 +614,9 @@ class ScriptInjector {
         // Reset ad state
         window.__forgeAdBlockLoaded = true;
         wasPlayingAd = false;
+        adStartTime = 0;
+        lastAdVideoTime = -1;
+        stuckAdCheckCount = 0;
         
         // Re-patch and cleanup
         patchPlayerResponse();

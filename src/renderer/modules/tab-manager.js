@@ -88,15 +88,21 @@ export const TabManagerMixin = {
     this.tabs = newOrder;
   },
 
-  createTab(url = null) {
+  createTab(url = null, options = {}) {
+    const { deferLoad = false, title = null, favicon = null } = options;
     const tabId = `tab-${++this.tabCounter}`;
     
     const tab = document.createElement('div');
     tab.className = 'tab';
     tab.dataset.tabId = tabId;
+    
+    // Use provided title/favicon for deferred tabs
+    const displayTitle = title || 'New Tab';
+    const displayFavicon = favicon || (url ? this.getCachedFavicon(url) : null);
+    
     tab.innerHTML = `
-      <img class="tab-favicon tab-icon-plus" src="forge-asset://ui-icons/plus.svg" alt="">
-      <span class="tab-title">New Tab</span>
+      <img class="tab-favicon ${displayFavicon ? '' : 'tab-icon-plus'}" src="${displayFavicon || 'forge-asset://ui-icons/plus.svg'}" alt="">
+      <span class="tab-title">${displayTitle}</span>
       <button class="tab-close" title="Close tab">
         <svg width="10" height="10" viewBox="0 0 10 10">
           <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5"/>
@@ -154,27 +160,15 @@ export const TabManagerMixin = {
     // Apply current brightness setting to new webview
     webview.style.filter = `brightness(${this.currentBrightness / 100})`;
     
-    // Get cached favicon before webview loads (if URL provided)
-    let cachedFavicon = null;
-    if (url) {
-      cachedFavicon = this.getCachedFavicon(url);
-      if (cachedFavicon) {
-        const iconElement = tab.querySelector('.tab-favicon');
-        if (iconElement) {
-          iconElement.src = cachedFavicon;
-          iconElement.classList.remove('tab-icon-plus');
-        }
-      }
-    }
-    
     // Store tab info
     this.tabs.push({
       id: tabId,
       element: tab,
       webview: webview,
-      title: 'New Tab',
+      title: displayTitle,
       url: url || '',
-      favicon: cachedFavicon,
+      favicon: displayFavicon,
+      pendingUrl: deferLoad ? url : null, // URL to load when tab becomes active
       history: [],
       historyIndex: -1,
       isPlayingAudio: false,
@@ -182,10 +176,13 @@ export const TabManagerMixin = {
       adsBlocked: 0
     });
     
-    this.switchTab(tabId);
-    
-    if (url) {
-      webview.src = url;
+    // Only switch to tab and load URL if not deferred
+    if (!deferLoad) {
+      this.switchTab(tabId);
+      
+      if (url) {
+        webview.src = url;
+      }
     }
     
     return tabId;
@@ -327,6 +324,13 @@ export const TabManagerMixin = {
       this.activeTabId = tabId;
       
       this.updateAdCounter(tab.adsBlocked || 0);
+      
+      // Check if this tab has a pending URL to load (deferred loading)
+      if (tab.pendingUrl && tab.webview) {
+        console.log('[Tab] Loading deferred tab:', tab.pendingUrl);
+        tab.webview.src = tab.pendingUrl;
+        tab.pendingUrl = null; // Clear pending URL after loading
+      }
       
       if (tab.isHome) {
         this.showWelcomePage();

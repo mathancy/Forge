@@ -22,6 +22,7 @@ import { WelcomeParticlesMixin } from './modules/welcome-particles.js';
 import { ModalSystemMixin } from './modules/modal-system.js';
 import { ThemesMixin } from './modules/themes.js';
 import { BookmarksMixin } from './modules/bookmarks.js';
+import TextContextMenuMixin from './modules/text-context-menu.js';
 
 console.log('[Forge] Loading modular renderer...');
 
@@ -103,6 +104,7 @@ class ForgeBrowser {
     this.initModalSystem();
     this.initThemes();
     this.initBookmarksBar();
+    this.initTextContextMenu();
     
     await this.initAdBlocker();
     await this.initFavorites();
@@ -127,12 +129,24 @@ class ForgeBrowser {
       }
     });
     
-    // Create initial Home tab
+    // Listen for open-url-in-new-tab message (when webview tries to open a new window)
+    window.forgeAPI.onOpenUrlInNewTab((url) => {
+      console.log('[Forge] Opening URL in new tab:', url);
+      this.createTab(url);
+    });
+    
+    // Try to restore previous session
+    const sessionRestored = await this.restoreSession();
+    
+    // Create initial Home tab only if no session restored and no URL opened
     setTimeout(() => {
-      if (!urlOpened) {
+      if (!urlOpened && !sessionRestored) {
         this.createHomeTab();
       }
     }, 50);
+    
+    // Set up session save on window close
+    this.setupSessionPersistence();
     
     this.updateStatus('Ready');
     console.log('[Forge] Initialization complete');
@@ -156,6 +170,7 @@ class ForgeBrowser {
     this.btnReload = document.getElementById('btn-reload');
     this.btnHome = document.getElementById('btn-home');
     this.urlInput = document.getElementById('url-input');
+    this.urlContainer = document.querySelector('.url-container');
     this.securityIndicator = document.getElementById('security-indicator');
     this.adCounter = document.getElementById('ad-counter');
     this.adCounterValue = document.getElementById('ad-counter-value');
@@ -336,6 +351,7 @@ class ForgeBrowser {
         e.preventDefault();
         this.hideSuggestions();
         this.navigate(this.urlInput.value);
+        this.urlInput.blur();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         this.selectNextSuggestion();
@@ -355,6 +371,16 @@ class ForgeBrowser {
       setTimeout(() => this.hideSuggestions(), 150);
     });
     
+    // Click anywhere in URL container to focus input
+    if (this.urlContainer) {
+      this.urlContainer.addEventListener('click', (e) => {
+        // Don't focus if clicking on buttons or other interactive elements
+        if (!e.target.closest('button') && !e.target.closest('.ad-counter')) {
+          this.urlInput.focus();
+        }
+      });
+    }
+    
     // Home search
     if (this.homeSearch) {
       this.homeSearch.addEventListener('keydown', (e) => {
@@ -362,6 +388,7 @@ class ForgeBrowser {
           e.preventDefault();
           this.navigate(this.homeSearch.value);
           this.homeSearch.value = '';
+          this.homeSearch.blur();
         }
       });
     }
@@ -444,7 +471,13 @@ class ForgeBrowser {
     if (this.bookmarkPopupClose) {
       this.bookmarkPopupClose.addEventListener('click', () => this.hideBookmarkPopup());
       if (this.bookmarkPopupOverlay) {
-        this.bookmarkPopupOverlay.addEventListener('click', () => this.hideBookmarkPopup());
+        // Use mousedown instead of click to prevent closing when drag-selecting text
+        // and releasing outside the modal
+        this.bookmarkPopupOverlay.addEventListener('mousedown', (e) => {
+          if (e.target === this.bookmarkPopupOverlay) {
+            this.hideBookmarkPopup();
+          }
+        });
       }
     }
     if (this.bookmarkNewFolderBtn) {
@@ -458,7 +491,8 @@ class ForgeBrowser {
     }
     
     // Close bookmark popup when clicking outside
-    document.addEventListener('click', (e) => {
+    // Use mousedown instead of click to prevent closing when drag-selecting text
+    document.addEventListener('mousedown', (e) => {
       if (this.bookmarkPopup && !this.bookmarkPopup.classList.contains('hidden')) {
         if (!this.bookmarkPopup.contains(e.target) && e.target !== this.btnBookmark && !this.btnBookmark.contains(e.target)) {
           this.hideBookmarkPopup();
@@ -477,10 +511,7 @@ class ForgeBrowser {
     // Context menu overlay
     if (this.contextMenuOverlay) {
       this.contextMenuOverlay.addEventListener('click', () => {
-        this.hideWebviewContextMenu();
-        this.hideBookmarkContextMenu();
-        this.hideBookmarksBarContextMenu();
-        this.hideFolderContextMenu();
+        this.hideAllContextMenus();
       });
     }
     
@@ -516,7 +547,12 @@ class ForgeBrowser {
     
     // Add folder modal events
     if (this.addFolderOverlay) {
-      this.addFolderOverlay.addEventListener('click', () => this.hideAddFolderModal());
+      // Use mousedown instead of click to prevent closing when drag-selecting text
+      this.addFolderOverlay.addEventListener('mousedown', (e) => {
+        if (e.target === this.addFolderOverlay) {
+          this.hideAddFolderModal();
+        }
+      });
     }
     if (this.addFolderCancelBtn) {
       this.addFolderCancelBtn.addEventListener('click', () => this.hideAddFolderModal());
@@ -536,7 +572,12 @@ class ForgeBrowser {
     
     // Bookmark edit modal events
     if (this.bookmarkEditOverlay) {
-      this.bookmarkEditOverlay.addEventListener('click', () => this.hideBookmarkEditModal());
+      // Use mousedown instead of click to prevent closing when drag-selecting text
+      this.bookmarkEditOverlay.addEventListener('mousedown', (e) => {
+        if (e.target === this.bookmarkEditOverlay) {
+          this.hideBookmarkEditModal();
+        }
+      });
     }
     if (this.bookmarkEditCancelBtn) {
       this.bookmarkEditCancelBtn.addEventListener('click', () => this.hideBookmarkEditModal());
@@ -602,6 +643,96 @@ class ForgeBrowser {
     } catch (e) {}
     return null;
   }
+
+  // Session persistence methods
+  async restoreSession() {
+    try {
+      const session = await window.forgeAPI.session.load();
+      if (!session || !session.tabs || session.tabs.length === 0) {
+        console.log('[Session] No session to restore');
+        return false;
+      }
+      
+      console.log('[Session] Restoring', session.tabs.length, 'tabs');
+      
+      // Restore each tab - only load the active one immediately
+      const activeIndex = session.activeTabIndex >= 0 ? session.activeTabIndex : 0;
+      
+      for (let i = 0; i < session.tabs.length; i++) {
+        const tabData = session.tabs[i];
+        const isActiveTab = (i === activeIndex);
+        
+        if (tabData.isHome) {
+          this.createHomeTab();
+        } else if (tabData.url) {
+          // Only load the active tab immediately; defer others
+          this.createTab(tabData.url, { 
+            deferLoad: !isActiveTab,
+            title: tabData.title,
+            favicon: tabData.favicon
+          });
+        }
+      }
+      
+      // Switch to the previously active tab
+      if (activeIndex >= 0 && activeIndex < this.tabs.length) {
+        this.switchTab(this.tabs[activeIndex].id);
+      }
+      
+      // Clear the session file after successful restore
+      await window.forgeAPI.session.clear();
+      
+      console.log('[Session] Restore complete');
+      return true;
+    } catch (e) {
+      console.error('[Session] Restore failed:', e);
+      return false;
+    }
+  }
+
+  async saveSession() {
+    try {
+      // Only save if this is the last window
+      const windowCount = await window.forgeAPI.session.getWindowCount();
+      if (windowCount > 1) {
+        console.log('[Session] Multiple windows open, not saving session');
+        return false;
+      }
+      
+      // Gather tab data - use pendingUrl if tab hasn't loaded yet
+      const tabsData = this.tabs.map(tab => ({
+        url: tab.pendingUrl || tab.url || '',
+        title: tab.title || 'New Tab',
+        isHome: tab.isHome || false,
+        favicon: tab.favicon || null
+      }));
+      
+      // Find active tab index
+      const activeTabIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+      
+      const sessionData = {
+        tabs: tabsData,
+        activeTabIndex: activeTabIndex,
+        timestamp: Date.now()
+      };
+      
+      await window.forgeAPI.session.save(sessionData);
+      console.log('[Session] Saved', tabsData.length, 'tabs');
+      return true;
+    } catch (e) {
+      console.error('[Session] Save failed:', e);
+      return false;
+    }
+  }
+
+  setupSessionPersistence() {
+    // Save session before window closes
+    window.addEventListener('beforeunload', async (e) => {
+      await this.saveSession();
+    });
+    
+    console.log('[Session] Persistence setup complete');
+  }
 }
 
 // Apply mixins - order matters for dependencies
@@ -622,6 +753,7 @@ applyMixin(ForgeBrowser, BrightnessControlMixin); // Brightness slider
 applyMixin(ForgeBrowser, WelcomeParticlesMixin);  // Welcome page particles
 applyMixin(ForgeBrowser, ThemesMixin);            // Theme management
 applyMixin(ForgeBrowser, ModalSystemMixin);       // Modal dialogs and notifications
+applyMixin(ForgeBrowser, TextContextMenuMixin);   // Text input context menus
 
 // Start the browser
 console.log('[Forge] Creating browser instance...');

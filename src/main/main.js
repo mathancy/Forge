@@ -80,6 +80,52 @@ function getAssetPath(...paths) {
 // Keep a global reference of the window object
 let mainWindow = null;
 
+// Track all open browser windows for session management
+const browserWindows = new Set();
+
+// Session file path for tab persistence
+function getSessionFilePath() {
+  return path.join(app.getPath('userData'), 'session.json');
+}
+
+// Save session data
+function saveSession(sessionData) {
+  try {
+    fs.writeFileSync(getSessionFilePath(), JSON.stringify(sessionData, null, 2));
+    console.log('[Session] Saved', sessionData.tabs?.length || 0, 'tabs');
+  } catch (e) {
+    console.error('[Session] Failed to save:', e);
+  }
+}
+
+// Load session data
+function loadSession() {
+  try {
+    const sessionPath = getSessionFilePath();
+    if (fs.existsSync(sessionPath)) {
+      const data = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+      console.log('[Session] Loaded', data.tabs?.length || 0, 'tabs');
+      return data;
+    }
+  } catch (e) {
+    console.error('[Session] Failed to load:', e);
+  }
+  return null;
+}
+
+// Clear session (called after successful restore)
+function clearSession() {
+  try {
+    const sessionPath = getSessionFilePath();
+    if (fs.existsSync(sessionPath)) {
+      fs.unlinkSync(sessionPath);
+      console.log('[Session] Cleared');
+    }
+  } catch (e) {
+    console.error('[Session] Failed to clear:', e);
+  }
+}
+
 // Handle keyboard shortcuts globally
 function handleKeyboardShortcut(event, input, targetWindow) {
   if (input.type !== 'keyDown') return;
@@ -128,6 +174,17 @@ app.on('web-contents-created', (event, contents) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         handleKeyboardShortcut(event, input, mainWindow);
       }
+    });
+    
+    // Handle window.open() and target="_blank" links - open in new tab instead
+    contents.setWindowOpenHandler(({ url, frameName, features, disposition }) => {
+      // Send message to renderer to open URL in a new tab
+      const parentWindow = BrowserWindow.fromWebContents(contents.hostWebContents);
+      if (parentWindow && !parentWindow.isDestroyed()) {
+        parentWindow.webContents.send('open-url-in-new-tab', url);
+      }
+      // Deny the default window creation
+      return { action: 'deny' };
     });
   }
 });
@@ -208,7 +265,13 @@ function createWindow() {
 
   // DevTools can be opened manually via menu or keyboard shortcut (Ctrl+Shift+I)
 
+  // Track this window
+  browserWindows.add(mainWindow);
+  console.log('[Session] Window opened. Total windows:', browserWindows.size);
+
   mainWindow.on('closed', () => {
+    browserWindows.delete(mainWindow);
+    console.log('[Session] Window closed. Remaining windows:', browserWindows.size);
     mainWindow = null;
   });
 
@@ -306,6 +369,25 @@ ipcMain.handle('window-is-maximized', (event) => {
   return window?.isMaximized() ?? false;
 });
 
+// Session management IPC handlers
+ipcMain.handle('session-save', (event, sessionData) => {
+  saveSession(sessionData);
+  return true;
+});
+
+ipcMain.handle('session-load', () => {
+  return loadSession();
+});
+
+ipcMain.handle('session-clear', () => {
+  clearSession();
+  return true;
+});
+
+ipcMain.handle('get-window-count', () => {
+  return browserWindows.size;
+});
+
 // IPC Handler for opening DevTools (docked in main window)
 ipcMain.handle('open-devtools', (event) => {
   const window = BrowserWindow.fromWebContents(event.sender);
@@ -354,6 +436,15 @@ ipcMain.handle('create-new-window', (event, url) => {
   session.defaultSession.setUserAgent(FORGE_CONFIG.userAgent);
   
   newWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+  
+  // Track this window
+  browserWindows.add(newWindow);
+  console.log('[Session] New window opened. Total windows:', browserWindows.size);
+  
+  newWindow.on('closed', () => {
+    browserWindows.delete(newWindow);
+    console.log('[Session] Window closed. Remaining windows:', browserWindows.size);
+  });
   
   // If URL is provided, send it to the new window once it's ready
   if (url) {
@@ -779,6 +870,6 @@ ipcMain.handle('create-password-anvil-window', () => {
     }
   });
   
-  passwordWindow.loadFile(path.join(__dirname, '../renderer/password-anvil.html'));
+  passwordWindow.loadFile(path.join(__dirname, '../renderer/password-anvil/index.html'));
   return { success: true };
 });
